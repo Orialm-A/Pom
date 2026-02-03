@@ -1,3 +1,5 @@
+pub type PomResult<T> = Result<T, (PomErrorCode, Option<String>)>;
+
 #[repr(i32)]  // `u8` more pertinent but would need a cast for `std::process::exit(code: i32)`
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PomErrorCode {
@@ -22,8 +24,11 @@ impl PomErrorCode {
         }
     }
 
-    pub fn handler(self) -> ! {
+    pub fn handler(self, src: Option<&str>) -> ! {
         eprintln!("error[E{}]: {}", self.exit_code(), self.error_message());
+        if let Some(details) = src {
+            eprintln!("details: {}", details);
+        }
         eprintln!("fatal - exiting pom now...");
         std::process::exit(self.exit_code());
     }
