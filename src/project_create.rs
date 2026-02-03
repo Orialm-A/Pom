@@ -1,6 +1,6 @@
 use std::env;
 use std::path::PathBuf;
-use std::process;
+use crate::errors::PomErrorCode;
 use crate::prompt::{prompt_if_missing_string, slugify_snake};
 
 pub fn project_create(
@@ -13,18 +13,12 @@ pub fn project_create(
 ) {
     let project_root = match get_project_root(project_path_parameter) {
         Ok(extracted_project_root) => { extracted_project_root },
-        Err(error_description) => {
-            eprintln!("{error_description}");
-            process::exit(1);
-        }
+        Err(error_code) => { error_code.handler(); }
     };
 
     match validate_project_root(&project_root) {
         Ok(()) => {},
-        Err(error_description) => {
-            eprintln!("{error_description}");
-            process::exit(1);
-        }
+        Err(error_code) => { error_code.handler(); }
     };
 
     let (project_name, project_name_normalized) = get_project_name(project_name_parameter);
@@ -37,19 +31,19 @@ pub fn project_create(
         project_dir.display()
     );
 
-    if dry_run == false {
-        println!("File creating not implemented yet");
+    if !dry_run {
+        println!("(not implemented) Would create project files");
     }
 }
 
 
-fn get_project_root(project_path_parameter: Option<PathBuf>) -> Result<PathBuf, String> {
+fn get_project_root(project_path_parameter: Option<PathBuf>) -> Result<PathBuf, PomErrorCode> {
     // Path in environment variable is tested first to return early (dev highest priority)
     match env::var("POM_DEV_TEST_PROJECT") {
         Ok(project_root) => return Ok(PathBuf::from(project_root)),
         Err(env::VarError::NotPresent) => {},
         Err(env::VarError::NotUnicode(_)) => {
-            return Err("POM_DEV_TEST_PROJECT contains invalid Unicode.".into());
+            return Err(PomErrorCode::ProjectPathDebugNotUnicode);
         },
     };
 
@@ -62,21 +56,22 @@ fn get_project_root(project_path_parameter: Option<PathBuf>) -> Result<PathBuf, 
     // Current directory fallback
     match env::current_dir() {
         Ok(project_root) => Ok(project_root),
-        Err(e) => Err(format!("Cannot get current directory: {e}")),
+        Err(_) => Err(PomErrorCode::ProjectPathCurrentDirFailed),
+        //TODO: Find a way to escalate the precisions like `_` here. It would explain why it failed
     }
 }
 
 
-fn validate_project_root(project_root: &PathBuf) -> Result<(), String> {
+fn validate_project_root(project_root: &PathBuf) -> Result<(), PomErrorCode> {
     let stringified_project_root = project_root.as_os_str().to_string_lossy();
 
     if stringified_project_root.trim().is_empty() {
-        return Err(format!("`{}` is empty or whitespace", project_root.display()));
+        return Err(PomErrorCode::ProjectPathEmpty);
     }
 
     let marker = project_root.join("pom_source_safeguard.txt");
     if marker.is_file() {
-        return Err(format!("Refusing to use `{}` as project root cause it looks like Pom's source directory. Did you export `POM_DEV_TEST_PROJECT` correctly?", project_root.display()));
+        return Err(PomErrorCode::ProjectPathInPomSource);
     }
 
     Ok(())

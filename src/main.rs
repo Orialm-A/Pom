@@ -2,6 +2,7 @@ mod cli;
 mod pom_api;
 mod project_create;
 mod prompt;
+mod errors;
 
 use clap::Parser;
 use crate::cli::TopLevelCommands::*;
