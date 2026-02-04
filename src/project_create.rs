@@ -1,7 +1,8 @@
 use std::env;
-use std::path::PathBuf;
+use std::path::{PathBuf, Path};
 use crate::errors::{PomErrorCode, PomResult};
 use crate::prompt::{prompt_if_missing_string, slugify_snake};
+use std::fs;
 
 pub fn project_create(
     // The project name passed in the CLI
@@ -32,7 +33,10 @@ pub fn project_create(
     );
 
     if !dry_run {
-        println!("(not implemented) Would create project files");
+        match create_root_dir(&project_dir) {
+            Ok(()) => {},
+            Err((error_code, src)) => {error_code.handler(src.as_deref()); }
+        }
     }
 }
 
@@ -43,7 +47,7 @@ fn get_project_root(project_path_parameter: Option<PathBuf>) -> PomResult<PathBu
         Ok(project_root) => return Ok(PathBuf::from(project_root)),
         Err(env::VarError::NotPresent) => {},
         Err(env::VarError::NotUnicode(src)) => {
-            let details = format!("{:?}", src);
+            let details = format!("{:?}", src);  // `OsString`. Doesn't implement `Display`
             return Err((
                 PomErrorCode::ProjectPathDebugNotUnicode,
                 Some(details),
@@ -91,4 +95,102 @@ fn get_project_name(project_name_parameter: Option<String>) -> (String, String) 
     let project_name_normalized = slugify_snake(&project_name);
 
     (project_name, project_name_normalized)
+}
+
+fn create_root_dir(project_dir: &Path) -> PomResult<()> {  // `PathBuf` owns memory, `Path` is a borrowed view
+
+    if project_dir.exists() {
+        let show_path = format!("Check `{}`.", project_dir.display().to_string());
+        if project_dir.is_dir() {
+            match project_dir.read_dir() {
+                Ok(mut entries) => {
+                    if entries.next().is_some() {
+                        return Err((PomErrorCode::ProjectPathNotEmpty, Some(show_path)));
+                    }
+                }
+                Err(src) => {
+                    return Err((
+                        PomErrorCode::ProjectPathFailedToReadDir,
+                        Some(src.to_string()),
+                    ));
+                }
+            }
+        } else {
+            // Exists but not a directory
+            return Err((PomErrorCode::ProjectPathExistsAndNotDir, Some(show_path)));
+        }
+    }
+
+
+
+    match fs::create_dir_all(project_dir) {
+        Ok(()) => Ok(()),
+        Err(src) => {
+            let details = format!("{:?}", src);
+            Err((PomErrorCode::ProjectPathFailedToCreateRoot, Some(details)))
+        }
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::fs::File;
+    use std::path::Path;
+
+    // Helper to extract just the error code (keeps asserts clean)
+    fn code_of<T>(r: PomResult<T>) -> PomErrorCode {
+        match r {
+            Ok(_) => panic!("expected Err(..), got Ok(..)"),
+            Err((code, _details)) => code,
+        }
+    }
+
+    #[test]
+    fn creates_dir_when_missing() {
+        let tmp = tempfile::tempdir().unwrap();
+        let target = tmp.path().join("new_project");
+
+        assert!(!target.exists());
+        create_root_dir(target.as_path()).unwrap();
+        assert!(target.is_dir());
+    }
+
+    #[test]
+    fn succeeds_if_dir_exists_and_empty() {
+        let tmp = tempfile::tempdir().unwrap();
+        let target = tmp.path().join("empty_dir");
+
+        fs::create_dir_all(&target).unwrap();
+        assert!(target.is_dir());
+
+        create_root_dir(target.as_path()).unwrap();
+        assert!(target.is_dir());
+    }
+
+    #[test]
+    fn fails_if_dir_exists_and_not_empty() {
+        let tmp = tempfile::tempdir().unwrap();
+        let target = tmp.path().join("non_empty_dir");
+
+        fs::create_dir_all(&target).unwrap();
+        File::create(target.join("something.txt")).unwrap();
+
+        let err_code = code_of(create_root_dir(target.as_path()));
+        assert_eq!(err_code, PomErrorCode::ProjectPathNotEmpty);
+    }
+
+    #[test]
+    fn fails_if_path_exists_and_is_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let target = tmp.path().join("not_a_dir");
+
+        File::create(&target).unwrap();
+        assert!(target.is_file());
+
+        let err_code = code_of(create_root_dir(target.as_path()));
+        assert_eq!(err_code, PomErrorCode::ProjectPathExistsAndNotDir);
+    }
 }
