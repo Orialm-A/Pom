@@ -71,7 +71,7 @@ fn get_project_root(project_path_parameter: Option<PathBuf>) -> PomResult<PathBu
 }
 
 
-fn validate_project_root(project_root: &PathBuf) -> PomResult<()> {
+fn validate_project_root(project_root: &Path) -> PomResult<()> {
     let stringified_project_root = project_root.as_os_str().to_string_lossy();
 
     if stringified_project_root.trim().is_empty() {
@@ -120,8 +120,6 @@ fn create_root_dir(project_dir: &Path) -> PomResult<()> {  // `PathBuf` owns mem
             return Err((PomErrorCode::ProjectPathExistsAndNotDir, Some(show_path)));
         }
     }
-
-
 
     match fs::create_dir_all(project_dir) {
         Ok(()) => Ok(()),
