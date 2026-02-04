@@ -3,6 +3,7 @@ use std::path::{PathBuf, Path};
 use crate::errors::{PomErrorCode, PomResult};
 use crate::prompt::{prompt_if_missing_string, slugify_snake};
 use std::fs;
+use crate::read_config_files::get_dir_tree;
 
 pub fn project_create(
     // The project name passed in the CLI
@@ -38,6 +39,8 @@ pub fn project_create(
             Err((error_code, src)) => {error_code.handler(src.as_deref()); }
         }
     }
+
+    get_dir_tree();
 }
 
 

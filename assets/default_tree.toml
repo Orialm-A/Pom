@@ -1,0 +1,60 @@
+# This file describes the directory structure to create within a project.
+# Only "final" directories must be listed, starting from the project root.
+# Pom is responsible for creating parent directories if they do not exist.
+#
+# Each [[dir]] entry describes one directory and its optional metadata.
+
+
+[[dir]]  # One directory declaration
+path = "src/app"  # Path relative to project root
+
+# If present, `defgroup` and `brief` are used to generate a Doxygen group.
+# The group name is inferred from the last path component (here: "app").
+defgroup = "Application Layer"
+brief = "High-level behavior and UI logic of the project."
+
+# If `module = true`, this directory can be used as a module level
+# (e.g. `pom module create --level app`).
+contains_modules = true
+module_prefix = "a"  # Optional prefix for files created in this module (e.g. a_foo.c)
+
+
+[[dir]]
+path = "src/hld"
+defgroup = "High-Level Drivers"
+brief = "Hardware abstraction drivers for the project."
+contains_modules = true
+module_prefix = "h"
+
+
+[[dir]]
+path = "src/lld"
+defgroup = "Low-Level Drivers"
+brief = "Direct hardware access and register-level drivers."
+contains_modules = true
+module_prefix = "l"
+
+
+[[dir]]
+path = "testsuite"
+defgroup = "Test Suite code"
+brief = "Integration and system-level tests for the project."
+contains_modules = true
+module_prefix = "t"
+
+
+[[dir]]
+path = "unit_tests"
+defgroup = "Unit tests code"
+brief = "Unit-level tests validating individual components."
+contains_modules = true
+module_prefix = "u"
+
+
+[[dir]]
+path = "resources/doc"
+
+
+[[dir]]
+path = "resources/pics"
+
