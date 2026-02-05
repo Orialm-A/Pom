@@ -174,139 +174,142 @@ fn create_sub_dir(dir_path: &Path) -> PomResult<()> {
 
 
 #[cfg(test)]
-mod tests {
+mod tests{
     use super::*;
-    use std::fs;
-    use std::fs::File;
-    use std::path::Path;
+    mod root_creation {
+        use super::*;
+        use std::fs;
+        use std::fs::File;
+        use std::path::Path;
 
-    // Helper to extract just the error code (keeps asserts clean)
-    fn code_of<T>(r: PomResult<T>) -> PomErrorCode {
-        match r {
-            Ok(_) => panic!("expected Err(..), got Ok(..)"),
-            Err((code, _details)) => code,
+        // Helper to extract just the error code (keeps asserts clean)
+        fn code_of<T>(r: PomResult<T>) -> PomErrorCode {
+            match r {
+                Ok(_) => panic!("expected Err(..), got Ok(..)"),
+                Err((code, _details)) => code,
+            }
+        }
+
+        #[test]
+        fn creates_dir_when_missing() {
+            let tmp = tempfile::tempdir().unwrap();
+            let target = tmp.path().join("new_project");
+
+            assert!(!target.exists());
+            create_root_dir(target.as_path()).unwrap();
+            assert!(target.is_dir());
+        }
+
+        #[test]
+        fn succeeds_if_dir_exists_and_empty() {
+            let tmp = tempfile::tempdir().unwrap();
+            let target = tmp.path().join("empty_dir");
+
+            fs::create_dir_all(&target).unwrap();
+            assert!(target.is_dir());
+
+            create_root_dir(target.as_path()).unwrap();
+            assert!(target.is_dir());
+        }
+
+        #[test]
+        fn fails_if_dir_exists_and_not_empty() {
+            let tmp = tempfile::tempdir().unwrap();
+            let target = tmp.path().join("non_empty_dir");
+
+            fs::create_dir_all(&target).unwrap();
+            File::create(target.join("something.txt")).unwrap();
+
+            let err_code = code_of(create_root_dir(target.as_path()));
+            assert_eq!(err_code, PomErrorCode::ProjectPathNotEmpty);
+        }
+
+        #[test]
+        fn fails_if_path_exists_and_is_file() {
+            let tmp = tempfile::tempdir().unwrap();
+            let target = tmp.path().join("not_a_dir");
+
+            File::create(&target).unwrap();
+            assert!(target.is_file());
+
+            let err_code = code_of(create_root_dir(target.as_path()));
+            assert_eq!(err_code, PomErrorCode::ProjectPathExistsAndNotDir);
         }
     }
 
-    #[test]
-    fn creates_dir_when_missing() {
-        let tmp = tempfile::tempdir().unwrap();
-        let target = tmp.path().join("new_project");
 
-        assert!(!target.exists());
-        create_root_dir(target.as_path()).unwrap();
-        assert!(target.is_dir());
-    }
-
-    #[test]
-    fn succeeds_if_dir_exists_and_empty() {
-        let tmp = tempfile::tempdir().unwrap();
-        let target = tmp.path().join("empty_dir");
-
-        fs::create_dir_all(&target).unwrap();
-        assert!(target.is_dir());
-
-        create_root_dir(target.as_path()).unwrap();
-        assert!(target.is_dir());
-    }
-
-    #[test]
-    fn fails_if_dir_exists_and_not_empty() {
-        let tmp = tempfile::tempdir().unwrap();
-        let target = tmp.path().join("non_empty_dir");
-
-        fs::create_dir_all(&target).unwrap();
-        File::create(target.join("something.txt")).unwrap();
-
-        let err_code = code_of(create_root_dir(target.as_path()));
-        assert_eq!(err_code, PomErrorCode::ProjectPathNotEmpty);
-    }
-
-    #[test]
-    fn fails_if_path_exists_and_is_file() {
-        let tmp = tempfile::tempdir().unwrap();
-        let target = tmp.path().join("not_a_dir");
-
-        File::create(&target).unwrap();
-        assert!(target.is_file());
-
-        let err_code = code_of(create_root_dir(target.as_path()));
-        assert_eq!(err_code, PomErrorCode::ProjectPathExistsAndNotDir);
-    }
-
-
-
-
-
-
-
+    // #[cfg(test)]
+    mod subdirs_creation {
+        use super::*;
+        use std::fs::File;
 
         #[test]
-    fn dry_run_does_not_create_dirs() {
-        let tmp = tempfile::tempdir().unwrap();
-        let project_dir = tmp.path();
+        fn dry_run_does_not_create_dirs() {
+            let tmp = tempfile::tempdir().unwrap();
+            let project_dir = tmp.path();
 
-        let dir_tree = vec![
-            DirSpec {
-                path: "src/app".into(),
-                defgroup: None,
-                brief: None,
-                contains_modules: false,
-                module_prefix: None,
-            }
-        ];
+            let dir_tree = vec![
+                DirSpec {
+                    path: "src/app".into(),
+                    defgroup: None,
+                    brief: None,
+                    contains_modules: false,
+                    module_prefix: None,
+                }
+            ];
 
-        generate_file_system(project_dir, &dir_tree, true).unwrap();
-        assert!(!project_dir.join("src/app").exists());
+            generate_file_system(project_dir, &dir_tree, true).unwrap();
+            assert!(!project_dir.join("src/app").exists());
+        }
+
+        #[test]
+        fn creates_dirs_when_not_dry_run() {
+            let tmp = tempfile::tempdir().unwrap();
+            let project_dir = tmp.path();
+
+            let dir_tree = vec![
+                DirSpec {
+                    path: "src/app".into(),
+                    defgroup: None,
+                    brief: None,
+                    contains_modules: false,
+                    module_prefix: None,
+                },
+                DirSpec {
+                    path: "resources/doc".into(),
+                    defgroup: None,
+                    brief: None,
+                    contains_modules: false,
+                    module_prefix: None,
+                },
+            ];
+
+            generate_file_system(project_dir, &dir_tree, false).unwrap();
+            assert!(project_dir.join("src/app").is_dir());
+            assert!(project_dir.join("resources/doc").is_dir());
+        }
+
+        #[test]
+        fn fails_if_dir_path_is_blocked_by_file() {
+            let tmp = tempfile::tempdir().unwrap();
+            let project_dir = tmp.path();
+
+            // Create a file "src" so "src/app" cannot become a directory
+            File::create(project_dir.join("src")).unwrap();
+
+            let dir_tree = vec![
+                DirSpec {
+                    path: "src/app".into(),
+                    defgroup: None,
+                    brief: None,
+                    contains_modules: false,
+                    module_prefix: None,
+                }
+            ];
+
+            let err = generate_file_system(project_dir, &dir_tree, false).unwrap_err();
+            assert_eq!(err.0, PomErrorCode::FileSystemGenFailedToCreateDir);
+        }
+
     }
-
-    #[test]
-    fn creates_dirs_when_not_dry_run() {
-        let tmp = tempfile::tempdir().unwrap();
-        let project_dir = tmp.path();
-
-        let dir_tree = vec![
-            DirSpec {
-                path: "src/app".into(),
-                defgroup: None,
-                brief: None,
-                contains_modules: false,
-                module_prefix: None,
-            },
-            DirSpec {
-                path: "resources/doc".into(),
-                defgroup: None,
-                brief: None,
-                contains_modules: false,
-                module_prefix: None,
-            },
-        ];
-
-        generate_file_system(project_dir, &dir_tree, false).unwrap();
-        assert!(project_dir.join("src/app").is_dir());
-        assert!(project_dir.join("resources/doc").is_dir());
-    }
-
-    #[test]
-    fn fails_if_dir_path_is_blocked_by_file() {
-        let tmp = tempfile::tempdir().unwrap();
-        let project_dir = tmp.path();
-
-        // Create a file "src" so "src/app" cannot become a directory
-        File::create(project_dir.join("src")).unwrap();
-
-        let dir_tree = vec![
-            DirSpec {
-                path: "src/app".into(),
-                defgroup: None,
-                brief: None,
-                contains_modules: false,
-                module_prefix: None,
-            }
-        ];
-
-        let err = generate_file_system(project_dir, &dir_tree, false).unwrap_err();
-        assert_eq!(err.0, PomErrorCode::FileSystemGenFailedToCreateDir);
-    }
-
 }
