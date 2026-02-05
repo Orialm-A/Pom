@@ -12,6 +12,11 @@ pub enum PomErrorCode {
     ProjectPathFailedToReadDir = 15,
     ProjectPathExistsAndNotDir = 16,
     ProjectPathFailedToCreateRoot = 17,
+    // Config files errors: 2x
+    ConfigFileDirTreePathNotFound = 20, // Not critical
+    ConfigFileCantReadDirTree = 21,
+    ConfigFileCantParseDirTree = 22,
+    ConfigFileNoDirTreeSourcesFound = 23,
 }
 
 impl PomErrorCode {
@@ -21,6 +26,7 @@ impl PomErrorCode {
 
     const fn error_message(self) -> &'static str {
         match self {
+            // Project Path errors: 1x
             PomErrorCode::ProjectPathEmpty => "Project path is empty or whitespace.",
             PomErrorCode::ProjectPathInPomSource => "Refusing to use this path as project root because it looks like Pom's source directory. Did you export `POM_DEV_TEST_PROJECT` correctly?",
             PomErrorCode::ProjectPathCurrentDirFailed => "Could not get current directory.",
@@ -29,6 +35,11 @@ impl PomErrorCode {
             PomErrorCode::ProjectPathFailedToReadDir => "The specified project path exists but can't be read to check if it is empty.",
             PomErrorCode::ProjectPathExistsAndNotDir => "The specified project path exists but is a file.",
             PomErrorCode::ProjectPathFailedToCreateRoot => "Failed to create the project directory for OS reasons.",
+            // Config files errors: 2x
+            PomErrorCode::ConfigFileDirTreePathNotFound => "Internal: missing config source was handled as fatal. This is a Pom bug.",
+            PomErrorCode::ConfigFileCantReadDirTree => "Found a dir tree config file but failed to read it.",
+            PomErrorCode::ConfigFileCantParseDirTree => "Found a dir tree config file but failed to parse it.",
+            PomErrorCode::ConfigFileNoDirTreeSourcesFound => "Did not found any dir tree config file.",
         }
     }
 

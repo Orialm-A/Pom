@@ -40,7 +40,12 @@ pub fn project_create(
         }
     }
 
-    get_dir_tree();
+    let dir_tree = match get_dir_tree() {
+        Ok(extracted_dir_tree) => {extracted_dir_tree},
+        Err((error_code, src)) => { error_code.handler(src.as_deref()); }
+    };
+
+    println!("{:#?}", dir_tree);
 }
 
 
