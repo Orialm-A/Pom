@@ -1,3 +1,5 @@
+use owo_colors::OwoColorize;
+
 pub type PomResult<T> = Result<T, (PomErrorCode, Option<String>)>;
 
 #[repr(i32)]  // `u8` more pertinent but would need a cast for `std::process::exit(code: i32)`
@@ -44,11 +46,17 @@ impl PomErrorCode {
     }
 
     pub fn handler(self, src: Option<&str>) -> ! {
-        eprintln!("error[E{}]: {}", self.exit_code(), self.error_message());
+        eprintln!(
+            "{}: {}",
+            format!("error [E{}]", self.exit_code()).red().bold(),
+            self.error_message().bold()
+        );
+
         if let Some(details) = src {
-            eprintln!("details: {}", details);
+            eprintln!("{}", format!("details: {}", details).red());
         }
-        eprintln!("fatal - exiting pom now...");
+
+        eprintln!("{}", "fatal - exiting pom now...".red());
         std::process::exit(self.exit_code());
     }
 }

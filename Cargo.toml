@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
+owo-colors = "4.2.3"
 serde = { version = "1", features = ["derive"] }
 tempfile = "3.24.0"
 text_io = "0.1.13"
