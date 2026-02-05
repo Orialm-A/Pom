@@ -34,9 +34,7 @@ pub fn get_dir_tree() -> PomResult<Vec<DirSpec>> {
             Err((PomErrorCode::ConfigFileDirTreePathNotFound, _)) => {
                 continue; // try lower priority source
             }
-            Err((error_code, src)) => {
-                error_code.handler(src.as_deref());
-            }
+            Err(e) => return Err(e), // Propagate to caller without unpacking
         }
     }
 
