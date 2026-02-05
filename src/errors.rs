@@ -19,6 +19,8 @@ pub enum PomErrorCode {
     ConfigFileCantReadDirTree = 21,
     ConfigFileCantParseDirTree = 22,
     ConfigFileNoDirTreeSourcesFound = 23,
+    // File system generation errors: 3x
+    FileSystemGenFailedToCreateDir = 30,
 }
 
 impl PomErrorCode {
@@ -42,6 +44,8 @@ impl PomErrorCode {
             PomErrorCode::ConfigFileCantReadDirTree => "Found a dir tree config file but failed to read it.",
             PomErrorCode::ConfigFileCantParseDirTree => "Found a dir tree config file but failed to parse it.",
             PomErrorCode::ConfigFileNoDirTreeSourcesFound => "Did not found any dir tree config file.",
+            // File system generation errors: 3x
+            PomErrorCode::FileSystemGenFailedToCreateDir => "Failed to create a subdir for the project."
         }
     }
 

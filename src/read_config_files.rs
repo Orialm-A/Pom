@@ -6,11 +6,11 @@ use std::io::ErrorKind;
 #[derive(Debug, Deserialize)]
 pub struct DirSpec {
     pub path: String,
-    defgroup: Option<String>,
-    brief: Option<String>,
+    pub defgroup: Option<String>,
+    pub brief: Option<String>,
     #[serde(default)]
-    contains_modules: bool,
-    module_prefix: Option<String>,
+    pub contains_modules: bool,
+    pub module_prefix: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

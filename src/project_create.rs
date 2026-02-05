@@ -3,7 +3,7 @@ use std::path::{PathBuf, Path};
 use crate::errors::{PomErrorCode, PomResult};
 use crate::prompt::{prompt_if_missing_string, slugify_snake};
 use std::fs;
-use crate::read_config_files::get_dir_tree;
+use crate::read_config_files::{get_dir_tree, DirSpec};
 
 pub fn project_create(
     // The project name passed in the CLI
@@ -28,8 +28,7 @@ pub fn project_create(
     let project_dir = project_root.join(&project_name_normalized);
 
     println!(
-        "Creating project '{}' at `{}`...",
-        project_name,
+        "Creating project directory at `{}`...",
         project_dir.display()
     );
 
@@ -45,7 +44,10 @@ pub fn project_create(
         Err((error_code, src)) => { error_code.handler(src.as_deref()); }
     };
 
-    println!("{:#?}", dir_tree);
+    match generate_file_system(&project_dir, &dir_tree, dry_run) {
+        Ok(()) => {},
+        Err((error_code, src)) => { error_code.handler(src.as_deref()); }
+    }
 }
 
 
@@ -105,6 +107,7 @@ fn get_project_name(project_name_parameter: Option<String>) -> (String, String) 
     (project_name, project_name_normalized)
 }
 
+
 fn create_root_dir(project_dir: &Path) -> PomResult<()> {  // `PathBuf` owns memory, `Path` is a borrowed view
 
     if project_dir.exists() {
@@ -134,6 +137,37 @@ fn create_root_dir(project_dir: &Path) -> PomResult<()> {  // `PathBuf` owns mem
         Err(src) => {
             let details = format!("{:?}", src);
             Err((PomErrorCode::ProjectPathFailedToCreateRoot, Some(details)))
+        }
+    }
+}
+
+
+fn generate_file_system(project_dir: &Path, dir_tree: &[DirSpec], dry_run: bool) -> PomResult<()> {
+    for dir_spec in dir_tree {
+
+        let full_path: PathBuf = project_dir.join(&dir_spec.path);
+        println!("Creating `{}`...", full_path.display());
+        if !dry_run {
+            match create_sub_dir(&full_path) {
+                Ok(()) => {},
+                Err(e) => return Err(e), // Propagate to caller without unpacking
+            }
+        }
+
+    }
+
+    Ok(())
+}
+
+
+fn create_sub_dir(dir_path: &Path) -> PomResult<()> {
+    match fs::create_dir_all(dir_path) {
+        Ok(()) => Ok(()),
+        Err(src) => {
+            Err((
+                PomErrorCode::FileSystemGenFailedToCreateDir,
+                Some(format!("{}: {}", dir_path.display(), src))
+            ))
         }
     }
 }
@@ -199,4 +233,80 @@ mod tests {
         let err_code = code_of(create_root_dir(target.as_path()));
         assert_eq!(err_code, PomErrorCode::ProjectPathExistsAndNotDir);
     }
+
+
+
+
+
+
+
+
+        #[test]
+    fn dry_run_does_not_create_dirs() {
+        let tmp = tempfile::tempdir().unwrap();
+        let project_dir = tmp.path();
+
+        let dir_tree = vec![
+            DirSpec {
+                path: "src/app".into(),
+                defgroup: None,
+                brief: None,
+                contains_modules: false,
+                module_prefix: None,
+            }
+        ];
+
+        generate_file_system(project_dir, &dir_tree, true).unwrap();
+        assert!(!project_dir.join("src/app").exists());
+    }
+
+    #[test]
+    fn creates_dirs_when_not_dry_run() {
+        let tmp = tempfile::tempdir().unwrap();
+        let project_dir = tmp.path();
+
+        let dir_tree = vec![
+            DirSpec {
+                path: "src/app".into(),
+                defgroup: None,
+                brief: None,
+                contains_modules: false,
+                module_prefix: None,
+            },
+            DirSpec {
+                path: "resources/doc".into(),
+                defgroup: None,
+                brief: None,
+                contains_modules: false,
+                module_prefix: None,
+            },
+        ];
+
+        generate_file_system(project_dir, &dir_tree, false).unwrap();
+        assert!(project_dir.join("src/app").is_dir());
+        assert!(project_dir.join("resources/doc").is_dir());
+    }
+
+    #[test]
+    fn fails_if_dir_path_is_blocked_by_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let project_dir = tmp.path();
+
+        // Create a file "src" so "src/app" cannot become a directory
+        File::create(project_dir.join("src")).unwrap();
+
+        let dir_tree = vec![
+            DirSpec {
+                path: "src/app".into(),
+                defgroup: None,
+                brief: None,
+                contains_modules: false,
+                module_prefix: None,
+            }
+        ];
+
+        let err = generate_file_system(project_dir, &dir_tree, false).unwrap_err();
+        assert_eq!(err.0, PomErrorCode::FileSystemGenFailedToCreateDir);
+    }
+
 }
