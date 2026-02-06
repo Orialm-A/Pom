@@ -21,6 +21,9 @@ pub enum PomErrorCode {
     ConfigFileNoDirTreeSourcesFound = 23,
     // File system generation errors: 3x
     FileSystemGenFailedToCreateDir = 30,
+    FileSystemGenInvalidDirPath = 31,
+    FileSystemDocGroupsFileGenFailed = 32,
+    FileSystemDocGroupsFileFillFailed = 33,
 }
 
 impl PomErrorCode {
@@ -45,7 +48,10 @@ impl PomErrorCode {
             PomErrorCode::ConfigFileCantParseDirTree => "Found a dir tree config file but failed to parse it.",
             PomErrorCode::ConfigFileNoDirTreeSourcesFound => "Did not found any dir tree config file.",
             // File system generation errors: 3x
-            PomErrorCode::FileSystemGenFailedToCreateDir => "Failed to create a subdir for the project."
+            PomErrorCode::FileSystemGenFailedToCreateDir => "Failed to create a subdir for the project.",
+            PomErrorCode::FileSystemGenInvalidDirPath => "The dir path is invalid, failed to extract its name.",
+            PomErrorCode::FileSystemDocGroupsFileGenFailed => "Failed to create `doc_groups.h`.",
+            PomErrorCode::FileSystemDocGroupsFileFillFailed => "Successfully created `doc_groups.h` but failed to fill it.",
         }
     }
 

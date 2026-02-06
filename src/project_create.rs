@@ -4,6 +4,18 @@ use crate::errors::{PomErrorCode, PomResult};
 use crate::prompt::{prompt_if_missing_string, slugify_snake};
 use std::fs;
 use crate::read_config_files::{get_dir_tree, DirSpec};
+use convert_case::{Case, Casing};
+use std::fs::File;
+use std::io::prelude::*;
+
+
+#[derive(Debug)]
+struct DoxygenGroup {
+    name: String,
+    defgroup: Option<String>,
+    brief: Option<String>,
+}
+
 
 pub fn project_create(
     // The project name passed in the CLI
@@ -143,6 +155,9 @@ fn create_root_dir(project_dir: &Path) -> PomResult<()> {  // `PathBuf` owns mem
 
 
 fn generate_file_system(project_dir: &Path, dir_tree: &[DirSpec], dry_run: bool) -> PomResult<()> {
+
+    let mut doxygen_groups_list: Vec<DoxygenGroup> = Vec::new();
+
     for dir_spec in dir_tree {
 
         let full_path: PathBuf = project_dir.join(&dir_spec.path);
@@ -154,6 +169,23 @@ fn generate_file_system(project_dir: &Path, dir_tree: &[DirSpec], dry_run: bool)
             }
         }
 
+        let dir_name = match get_dir_name(&full_path) {
+            Ok(extracted_dir_name) => extracted_dir_name,
+            Err(e) => return Err(e), // Propagate to caller without unpacking
+        };
+
+        if let Some(group) = get_doxygen_group(&dir_spec, &dir_name) {
+            println!("Adding Doxygen group {} to list...", &group.name);
+            doxygen_groups_list.push(group);
+        }
+    }
+
+    println!("Generating `doc_groups.h`...");
+    if !dry_run {
+        match generate_doc_groups_file(&project_dir, &doxygen_groups_list) {
+            Ok(()) => {},
+            Err(e) => return Err(e),  // Propagate to caller without unpacking
+        }
     }
 
     Ok(())
@@ -173,9 +205,93 @@ fn create_sub_dir(dir_path: &Path) -> PomResult<()> {
 }
 
 
+fn get_dir_name(path: &Path) -> PomResult<&str> {
+    let dir_name_opt = path
+        .components()
+        .last()
+        .and_then(|c| c.as_os_str().to_str());
+
+    match dir_name_opt {
+        Some(dir_name) if !dir_name.is_empty() => Ok(dir_name),
+        _ => Err((
+            PomErrorCode::FileSystemGenInvalidDirPath,
+            Some(format!("Invalid directory path: `{}`.", path.display())),
+        )),
+    }
+}
+
+
+fn get_doxygen_group(dir: &DirSpec, dir_name: &str) -> Option<DoxygenGroup> {
+    if dir.defgroup.is_none() && dir.brief.is_none() {
+        return None;
+    }
+
+    Some(DoxygenGroup {
+        name: dir_name.to_string().to_case(Case::Snake),
+        defgroup: dir.defgroup.clone(),
+        brief: dir.brief.clone(),
+    })
+}
+
+
+fn generate_doc_groups_file(project_root: &Path, groups_list: &[DoxygenGroup]) -> PomResult<()> {
+    let doc_groups_file_path = project_root.join("doc_groups.h");
+
+    let mut file = match File::create_new(&doc_groups_file_path) {
+        Ok(f) => f,
+        Err(src) => {
+            return Err((
+                PomErrorCode::FileSystemDocGroupsFileGenFailed,
+                Some(src.to_string()),
+            ));
+        }
+    };
+
+    let mut file_content = String::new();
+
+    for group in groups_list {
+        file_content.push_str(&generate_group_block(group));
+    }
+
+    match file.write_all(file_content.as_bytes()) {
+        Ok(()) => {}
+        Err(src) => {
+            return Err((
+                PomErrorCode::FileSystemDocGroupsFileFillFailed,
+                Some(src.to_string()),
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+
+fn generate_group_block(group: &DoxygenGroup) -> String {
+    let mut group_block = String::new();
+    group_block.push_str("/**\n");
+    let id = &group.name;
+
+    let defgroup = match &group.defgroup {
+        Some(t) => t.as_str(),
+        None => id.as_str(),
+    };
+    group_block.push_str(&format!(" * @defgroup {} {}\n", id, defgroup));
+
+    if let Some(brief) = &group.brief {
+        group_block.push_str(&format!(" * @brief {}\n", brief));
+    }
+
+    group_block.push_str(" */\n\n");
+
+    group_block
+}
+
+
 #[cfg(test)]
 mod tests{
     use super::*;
+
     mod root_creation {
         use super::*;
         use std::fs;
