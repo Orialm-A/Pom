@@ -3,7 +3,7 @@ use std::path::{PathBuf, Path};
 use crate::errors::{PomErrorCode, PomResult};
 use crate::prompt::{prompt_if_missing_string, slugify_snake};
 use std::fs;
-use crate::read_config_files::{get_dir_tree, DirSpec};
+use crate::read_config_files::{read_generation_layout, GenerationLayoutEntry};
 use convert_case::{Case, Casing};
 use std::fs::File;
 use std::io::prelude::*;
@@ -17,15 +17,28 @@ struct DoxygenGroup {
 }
 
 
+struct ResolvedProjectLayout {
+    dirs: Vec<PathBuf>,
+    names: Vec<String>,
+    doxygen_groups: Vec<DoxygenGroup>,
+}
+
+
 pub fn project_create(
     // The project name passed in the CLI
     project_name_parameter: Option<String>,
     // The path where to create the project passed in the CLI
-    project_path_parameter: Option<PathBuf>,
+    project_root_parameter: Option<PathBuf>,
     // Print what would be done without creating / modifying files
     dry_run: bool
 ) {
-    let project_root = match get_project_root(project_path_parameter) {
+
+    let generation_layout = match read_generation_layout() {
+        Ok(extracted_generation_layout) => {extracted_generation_layout},
+        Err((error_code, src)) => { error_code.handler(src.as_deref()); }
+    };
+
+    let project_root = match get_project_root(project_root_parameter) {
         Ok(extracted_project_root) => { extracted_project_root },
         Err((error_code, src)) => { error_code.handler(src.as_deref()); }
     };
@@ -40,7 +53,7 @@ pub fn project_create(
     let project_dir = project_root.join(&project_name_normalized);
 
     println!(
-        "Creating project directory at `{}`...",
+        "Generate project directory `{}`...",
         project_dir.display()
     );
 
@@ -51,19 +64,30 @@ pub fn project_create(
         }
     }
 
-    let dir_tree = match get_dir_tree() {
-        Ok(extracted_dir_tree) => {extracted_dir_tree},
+    let resolved_project_layout = match resolve_project_layout(&project_dir, &generation_layout) {
+        Ok(extracted_resolved_project_layout) => { extracted_resolved_project_layout },
         Err((error_code, src)) => { error_code.handler(src.as_deref()); }
     };
 
-    match generate_file_system(&project_dir, &dir_tree, dry_run) {
-        Ok(()) => {},
-        Err((error_code, src)) => { error_code.handler(src.as_deref()); }
+    println!("Generate subdirectories...");
+    if !dry_run {
+        match create_sub_dirs(&resolved_project_layout.dirs) {
+            Ok(()) => {},
+            Err((error_code, src)) => {error_code.handler(src.as_deref()); }
+        }
+    }
+
+    println!("Generate `doc_groups.h`...");
+    if !dry_run {
+        match generate_doc_groups_file(&project_dir, &resolved_project_layout.doxygen_groups) {
+            Ok(()) => {},
+            Err((error_code, src)) => {error_code.handler(src.as_deref()); }
+        }
     }
 }
 
 
-fn get_project_root(project_path_parameter: Option<PathBuf>) -> PomResult<PathBuf> {
+fn get_project_root(project_root_parameter: Option<PathBuf>) -> PomResult<PathBuf> {
     // Path in environment variable is tested first to return early (dev highest priority)
     match env::var("POM_DEV_TEST_PROJECT") {
         Ok(project_root) => return Ok(PathBuf::from(project_root)),
@@ -71,14 +95,14 @@ fn get_project_root(project_path_parameter: Option<PathBuf>) -> PomResult<PathBu
         Err(env::VarError::NotUnicode(src)) => {
             let details = format!("{:?}", src);  // `OsString`. Doesn't implement `Display`
             return Err((
-                PomErrorCode::ProjectPathDebugNotUnicode,
+                PomErrorCode::PathToProjectRootEnvVarNotUnicode,
                 Some(details),
             ));
         },
     };
 
     // Parameter is tested before local directory to return early ensure user input priority
-    match project_path_parameter {
+    match project_root_parameter {
         Some(project_root) => return Ok(project_root),
         None => {},
     };
@@ -87,7 +111,7 @@ fn get_project_root(project_path_parameter: Option<PathBuf>) -> PomResult<PathBu
     match env::current_dir() {
         Ok(project_root) => Ok(project_root),
         Err(src) => {
-            Err((PomErrorCode::ProjectPathCurrentDirFailed, Some(src.to_string())))
+            Err((PomErrorCode::PathToProjectRootCantGetCurrentDir, Some(src.to_string())))
         },
     }
 }
@@ -97,12 +121,12 @@ fn validate_project_root(project_root: &Path) -> PomResult<()> {
     let stringified_project_root = project_root.as_os_str().to_string_lossy();
 
     if stringified_project_root.trim().is_empty() {
-        return Err((PomErrorCode::ProjectPathEmpty, None));
+        return Err((PomErrorCode::PathToProjectRootEmpty, None));
     }
 
     let marker = project_root.join("pom_source_safeguard.txt");
     if marker.is_file() {
-        return Err((PomErrorCode::ProjectPathInPomSource, None));
+        return Err((PomErrorCode::PathToProjectRootInPomSource, None));
     }
 
     Ok(())
@@ -128,19 +152,19 @@ fn create_root_dir(project_dir: &Path) -> PomResult<()> {  // `PathBuf` owns mem
             match project_dir.read_dir() {
                 Ok(mut entries) => {
                     if entries.next().is_some() {
-                        return Err((PomErrorCode::ProjectPathNotEmpty, Some(show_path)));
+                        return Err((PomErrorCode::PathToProjectRootNotEmpty, Some(show_path)));
                     }
                 }
                 Err(src) => {
                     return Err((
-                        PomErrorCode::ProjectPathFailedToReadDir,
+                        PomErrorCode::PathToProjectRootFailedToReadDir,
                         Some(src.to_string()),
                     ));
                 }
             }
         } else {
             // Exists but not a directory
-            return Err((PomErrorCode::ProjectPathExistsAndNotDir, Some(show_path)));
+            return Err((PomErrorCode::PathToProjectRootExistsAndNotDir, Some(show_path)));
         }
     }
 
@@ -148,60 +172,57 @@ fn create_root_dir(project_dir: &Path) -> PomResult<()> {  // `PathBuf` owns mem
         Ok(()) => Ok(()),
         Err(src) => {
             let details = format!("{:?}", src);
-            Err((PomErrorCode::ProjectPathFailedToCreateRoot, Some(details)))
+            Err((PomErrorCode::PathToProjectRootFailedToCreateRoot, Some(details)))
         }
     }
 }
 
 
-fn generate_file_system(project_dir: &Path, dir_tree: &[DirSpec], dry_run: bool) -> PomResult<()> {
+fn resolve_project_layout(project_dir: &Path, generation_layout: &[GenerationLayoutEntry]) -> PomResult<ResolvedProjectLayout> {
 
+    let mut subdirs_list: Vec<PathBuf> = Vec::new();
+    let mut names_list: Vec<String> = Vec::new();
     let mut doxygen_groups_list: Vec<DoxygenGroup> = Vec::new();
 
-    for dir_spec in dir_tree {
+    for generation_layout_entry in generation_layout {
 
-        let full_path: PathBuf = project_dir.join(&dir_spec.path);
-        println!("Creating `{}`...", full_path.display());
-        if !dry_run {
-            match create_sub_dir(&full_path) {
-                Ok(()) => {},
-                Err(e) => return Err(e), // Propagate to caller without unpacking
-            }
-        }
+        let subdir_full_path: PathBuf = project_dir.join(&generation_layout_entry.path);
 
-        let dir_name = match get_dir_name(&full_path) {
+
+        let dir_name = match get_dir_name(&subdir_full_path) {
             Ok(extracted_dir_name) => extracted_dir_name,
             Err(e) => return Err(e), // Propagate to caller without unpacking
         };
+        names_list.push(dir_name.to_string());
 
-        if let Some(group) = get_doxygen_group(&dir_spec, &dir_name) {
-            println!("Adding Doxygen group {} to list...", &group.name);
+        if let Some(group) = get_doxygen_group(&generation_layout_entry, &dir_name) {
             doxygen_groups_list.push(group);
         }
+
+        subdirs_list.push(subdir_full_path);
     }
 
-    println!("Generating `doc_groups.h`...");
-    if !dry_run {
-        match generate_doc_groups_file(&project_dir, &doxygen_groups_list) {
-            Ok(()) => {},
-            Err(e) => return Err(e),  // Propagate to caller without unpacking
-        }
-    }
-
-    Ok(())
+    Ok( ResolvedProjectLayout{
+        dirs: subdirs_list,
+        names: names_list,
+        doxygen_groups: doxygen_groups_list
+    })
 }
 
 
-fn create_sub_dir(dir_path: &Path) -> PomResult<()> {
-    match fs::create_dir_all(dir_path) {
-        Ok(()) => Ok(()),
-        Err(src) => {
-            Err((
-                PomErrorCode::FileSystemGenFailedToCreateDir,
-                Some(format!("{}: {}", dir_path.display(), src))
-            ))
-        }
+fn create_sub_dirs(dirs_path_list: &[PathBuf]) -> PomResult<()> {
+    for subdir_path in dirs_path_list {
+        match fs::create_dir_all(subdir_path) {
+            Ok(()) => { continue },
+            Err(src) => {
+                return Err((
+                    PomErrorCode::ProjectGenerationFailedToCreateSubDir,
+                    Some(format!("{}: {}", subdir_path.display(), src))
+                ));
+            }
+        };
     }
+    Ok(())
 }
 
 
@@ -214,14 +235,14 @@ fn get_dir_name(path: &Path) -> PomResult<&str> {
     match dir_name_opt {
         Some(dir_name) if !dir_name.is_empty() => Ok(dir_name),
         _ => Err((
-            PomErrorCode::FileSystemGenInvalidDirPath,
+            PomErrorCode::GenerationLayoutFileInvalidEntryPath,
             Some(format!("Invalid directory path: `{}`.", path.display())),
         )),
     }
 }
 
 
-fn get_doxygen_group(dir: &DirSpec, dir_name: &str) -> Option<DoxygenGroup> {
+fn get_doxygen_group(dir: &GenerationLayoutEntry, dir_name: &str) -> Option<DoxygenGroup> {
     if dir.defgroup.is_none() && dir.brief.is_none() {
         return None;
     }
@@ -241,7 +262,7 @@ fn generate_doc_groups_file(project_root: &Path, groups_list: &[DoxygenGroup]) -
         Ok(f) => f,
         Err(src) => {
             return Err((
-                PomErrorCode::FileSystemDocGroupsFileGenFailed,
+                PomErrorCode::ProjectGenerationFailedToCreateDocGroups,
                 Some(src.to_string()),
             ));
         }
@@ -257,7 +278,7 @@ fn generate_doc_groups_file(project_root: &Path, groups_list: &[DoxygenGroup]) -
         Ok(()) => {}
         Err(src) => {
             return Err((
-                PomErrorCode::FileSystemDocGroupsFileFillFailed,
+                PomErrorCode::ProjectGenerationGroupsFileWriteFailed,
                 Some(src.to_string()),
             ));
         }
@@ -337,7 +358,7 @@ mod tests{
             File::create(target.join("something.txt")).unwrap();
 
             let err_code = code_of(create_root_dir(target.as_path()));
-            assert_eq!(err_code, PomErrorCode::ProjectPathNotEmpty);
+            assert_eq!(err_code, PomErrorCode::PathToProjectRootNotEmpty);
         }
 
         #[test]
@@ -349,7 +370,7 @@ mod tests{
             assert!(target.is_file());
 
             let err_code = code_of(create_root_dir(target.as_path()));
-            assert_eq!(err_code, PomErrorCode::ProjectPathExistsAndNotDir);
+            assert_eq!(err_code, PomErrorCode::PathToProjectRootExistsAndNotDir);
         }
     }
 
@@ -364,8 +385,8 @@ mod tests{
             let tmp = tempfile::tempdir().unwrap();
             let project_dir = tmp.path();
 
-            let dir_tree = vec![
-                DirSpec {
+            let generation_layout = vec![
+                GenerationLayoutEntry {
                     path: "src/app".into(),
                     defgroup: None,
                     brief: None,
@@ -374,7 +395,7 @@ mod tests{
                 }
             ];
 
-            generate_file_system(project_dir, &dir_tree, true).unwrap();
+            generate_file_system(project_dir, &generation_layout, true).unwrap();
             assert!(!project_dir.join("src/app").exists());
         }
 
@@ -383,15 +404,15 @@ mod tests{
             let tmp = tempfile::tempdir().unwrap();
             let project_dir = tmp.path();
 
-            let dir_tree = vec![
-                DirSpec {
+            let generation_layout = vec![
+                GenerationLayoutEntry {
                     path: "src/app".into(),
                     defgroup: None,
                     brief: None,
                     contains_modules: false,
                     module_prefix: None,
                 },
-                DirSpec {
+                GenerationLayoutEntry {
                     path: "resources/doc".into(),
                     defgroup: None,
                     brief: None,
@@ -400,7 +421,7 @@ mod tests{
                 },
             ];
 
-            generate_file_system(project_dir, &dir_tree, false).unwrap();
+            generate_file_system(project_dir, &generation_layout, false).unwrap();
             assert!(project_dir.join("src/app").is_dir());
             assert!(project_dir.join("resources/doc").is_dir());
         }
@@ -413,8 +434,8 @@ mod tests{
             // Create a file "src" so "src/app" cannot become a directory
             File::create(project_dir.join("src")).unwrap();
 
-            let dir_tree = vec![
-                DirSpec {
+            let generation_layout = vec![
+                GenerationLayoutEntry {
                     path: "src/app".into(),
                     defgroup: None,
                     brief: None,
@@ -423,8 +444,8 @@ mod tests{
                 }
             ];
 
-            let err = generate_file_system(project_dir, &dir_tree, false).unwrap_err();
-            assert_eq!(err.0, PomErrorCode::FileSystemGenFailedToCreateDir);
+            let err = generate_file_system(project_dir, &generation_layout, false).unwrap_err();
+            assert_eq!(err.0, PomErrorCode::ProjectGenerationFailedToCreateSubDir);
         }
 
     }

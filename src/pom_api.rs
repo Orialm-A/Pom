@@ -2,9 +2,9 @@ use crate::project_create::project_create;
 use std::path::PathBuf;
 
 
-pub fn project_create_function(project_name: Option<String>, project_path: Option<PathBuf>, dry_run: bool) {
+pub fn project_create_function(project_name: Option<String>, project_root: Option<PathBuf>, dry_run: bool) {
     // eprintln!("`pom project create` - not implemented yet");
-    project_create(project_name, project_path, dry_run);
+    project_create(project_name, project_root, dry_run);
 }
 
 pub fn project_rename_function(_new_name: Option<String>) {
