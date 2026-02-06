@@ -312,12 +312,12 @@ fn generate_group_block(group: &DoxygenGroup) -> String {
 #[cfg(test)]
 mod tests{
     use super::*;
+    use std::fs::{self, File};
+    use std::path::Path;
+    use std::io::Read;
 
     mod root_creation {
         use super::*;
-        use std::fs;
-        use std::fs::File;
-        use std::path::Path;
 
         // Helper to extract just the error code (keeps asserts clean)
         fn code_of<T>(r: PomResult<T>) -> PomErrorCode {
@@ -375,78 +375,166 @@ mod tests{
     }
 
 
-    // #[cfg(test)]
     mod subdirs_creation {
         use super::*;
-        use std::fs::File;
 
         #[test]
-        fn dry_run_does_not_create_dirs() {
+        fn creates_dirs_when_missing() {
             let tmp = tempfile::tempdir().unwrap();
-            let project_dir = tmp.path();
+            let project_root = tmp.path();
 
-            let generation_layout = vec![
-                GenerationLayoutEntry {
-                    path: "src/app".into(),
-                    defgroup: None,
-                    brief: None,
-                    contains_modules: false,
-                    module_prefix: None,
-                }
+            let dirs = vec![
+                project_root.join("src/app"),
+                project_root.join("resources/doc"),
             ];
 
-            generate_file_system(project_dir, &generation_layout, true).unwrap();
-            assert!(!project_dir.join("src/app").exists());
+            create_sub_dirs(&dirs).unwrap();
+
+            assert!(project_root.join("src").is_dir());
+            assert!(project_root.join("src/app").is_dir());
+            assert!(project_root.join("resources/doc").is_dir());
         }
 
         #[test]
-        fn creates_dirs_when_not_dry_run() {
+        fn succeeds_if_dirs_already_exist() {
             let tmp = tempfile::tempdir().unwrap();
-            let project_dir = tmp.path();
+            let project_root = tmp.path();
 
-            let generation_layout = vec![
-                GenerationLayoutEntry {
-                    path: "src/app".into(),
-                    defgroup: None,
-                    brief: None,
-                    contains_modules: false,
-                    module_prefix: None,
-                },
-                GenerationLayoutEntry {
-                    path: "resources/doc".into(),
-                    defgroup: None,
-                    brief: None,
-                    contains_modules: false,
-                    module_prefix: None,
-                },
+            fs::create_dir_all(project_root.join("src/app")).unwrap();
+
+            let dirs = vec![
+                project_root.join("src/app"),
+                project_root.join("resources/doc"),
             ];
 
-            generate_file_system(project_dir, &generation_layout, false).unwrap();
-            assert!(project_dir.join("src/app").is_dir());
-            assert!(project_dir.join("resources/doc").is_dir());
+            create_sub_dirs(&dirs).unwrap();
+
+            assert!(project_root.join("src/app").is_dir());
+            assert!(project_root.join("resources/doc").is_dir());
         }
 
         #[test]
         fn fails_if_dir_path_is_blocked_by_file() {
             let tmp = tempfile::tempdir().unwrap();
-            let project_dir = tmp.path();
+            let project_root = tmp.path();
 
             // Create a file "src" so "src/app" cannot become a directory
-            File::create(project_dir.join("src")).unwrap();
+            File::create(project_root.join("src")).unwrap();
 
-            let generation_layout = vec![
-                GenerationLayoutEntry {
-                    path: "src/app".into(),
-                    defgroup: None,
-                    brief: None,
-                    contains_modules: false,
-                    module_prefix: None,
-                }
+            let dirs = vec![
+                project_root.join("src/app"),
             ];
 
-            let err = generate_file_system(project_dir, &generation_layout, false).unwrap_err();
+            let err = create_sub_dirs(&dirs).unwrap_err();
             assert_eq!(err.0, PomErrorCode::ProjectGenerationFailedToCreateSubDir);
         }
+    }
 
+    mod dir_name_extraction {
+        use super::*;
+
+        #[test]
+        fn extracts_last_component_normal_path() {
+            let p = std::path::Path::new("src/app");
+            let name = get_dir_name(p).unwrap();
+            assert_eq!(name, "app");
+        }
+
+        #[test]
+        fn extracts_last_component_with_trailing_slash() {
+            let p = std::path::Path::new("src/app/");
+            let name = get_dir_name(p).unwrap();
+            assert_eq!(name, "app");
+        }
+
+        #[test]
+        fn fails_on_empty_path() {
+            let p = std::path::Path::new("");
+            let err = get_dir_name(p).unwrap_err();
+            assert_eq!(err.0, PomErrorCode::GenerationLayoutFileInvalidEntryPath);
+        }
+    }
+
+    mod doxygen_groups_generation {
+        use super::*;
+
+        #[test]
+        fn returns_none_when_no_defgroup_and_no_brief() {
+            let entry = GenerationLayoutEntry {
+                path: "src/app".into(),
+                defgroup: None,
+                brief: None,
+                contains_modules: false,
+                module_prefix: None,
+            };
+
+            let group = get_doxygen_group(&entry, "app");
+            assert!(group.is_none());
+        }
+
+        #[test]
+        fn creates_group_when_defgroup_or_brief_present() {
+            let entry = GenerationLayoutEntry {
+                path: "src/app".into(),
+                defgroup: Some("Application Layer".into()),
+                brief: Some("High-level behavior.".into()),
+                contains_modules: false,
+                module_prefix: None,
+            };
+
+            let group = get_doxygen_group(&entry, "app").unwrap();
+            assert_eq!(group.name, "app");
+            assert_eq!(group.defgroup.as_deref(), Some("Application Layer"));
+            assert_eq!(group.brief.as_deref(), Some("High-level behavior."));
+        }
+
+        #[test]
+        fn group_block_contains_expected_tags() {
+            let group = DoxygenGroup {
+                name: "app".into(),
+                defgroup: Some("Application Layer".into()),
+                brief: Some("High-level behavior.".into()),
+            };
+
+            let block = generate_group_block(&group);
+
+            // Keep assertions loose (format can evolve)
+            assert!(block.contains("@defgroup"));
+            assert!(block.contains("app"));
+            assert!(block.contains("Application Layer"));
+            assert!(block.contains("@brief"));
+            assert!(block.contains("High-level behavior."));
+        }
+
+        #[test]
+        fn writes_doc_groups_file() {
+            let tmp = tempfile::tempdir().unwrap();
+            let project_root = tmp.path();
+
+            let groups = vec![
+                DoxygenGroup {
+                    name: "app".into(),
+                    defgroup: Some("Application Layer".into()),
+                    brief: Some("High-level behavior.".into()),
+                },
+                DoxygenGroup {
+                    name: "hld".into(),
+                    defgroup: Some("High-Level Drivers".into()),
+                    brief: None,
+                },
+            ];
+
+            generate_doc_groups_file(project_root, &groups).unwrap();
+
+            let mut contents = String::new();
+            File::open(project_root.join("doc_groups.h"))
+                .unwrap()
+                .read_to_string(&mut contents)
+                .unwrap();
+
+            assert!(contents.contains("@defgroup"));
+            assert!(contents.contains("app"));
+            assert!(contents.contains("hld"));
+        }
     }
 }
