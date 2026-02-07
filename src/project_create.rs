@@ -108,6 +108,14 @@ pub fn project_create(
             Err((error_code, src)) => {error_code.handler(src.as_deref()); }
         }
     }
+
+    println!("Generate target-free files...");
+    if !dry_run {
+        match copy_target_free_files(&project_root) {
+            Ok(()) => {},
+            Err((error_code, src)) => {error_code.handler(src.as_deref()); }
+        }
+    }
 }
 
 
@@ -386,6 +394,101 @@ fn generate_group_block(group: &DoxygenGroup) -> String {
     group_block
 }
 
+
+fn copy_target_free_files(project_root: &Path) -> PomResult<()> {
+
+    let default_source: &'static str= "assets/target_free";
+
+    let files_sources: Vec<&str> = vec![
+        // Later: add higher priority config files here
+        default_source, // Lowest priority
+        ];
+
+    for files_source in files_sources {
+        let source_path = std::path::Path::new(files_source);
+
+        if !source_path.exists() {
+            if files_source == default_source {
+                return Err((PomErrorCode::ProjectGenerationTargetFreeFilesDefaultMissing, None));
+            }
+        }
+
+        match copy_target_free_files_core_logic(project_root, source_path) {
+            Ok(file_count) => {
+                if file_count == 0 {
+                    if files_source == default_source {
+                    // Should never get here!
+                    // If no file has been copied from the default source, it means `assets/target_free` is empty: The repository has an issue, or the build output has an issue.
+                    return Err((PomErrorCode::ProjectGenerationTargetFreeFilesDefaultSourceEmpty, None));
+                    } else {
+                        continue;  // High priority empty, fall back to lower
+                    }
+                }
+                return Ok(());
+            },
+            Err(e) => return Err(e),  // Propagate to caller without unpacking
+        };
+    }
+
+    Ok(())
+}
+
+fn copy_target_free_files_core_logic(project_root: &Path, source_path: &Path) -> PomResult<usize> {
+    let mut file_count: usize = 0;
+    let entries =  match fs::read_dir(source_path) {
+        Ok(extracted_entries) => extracted_entries,
+        Err(src) => {
+            return Err((
+                PomErrorCode::ProjectGenerationTargetFreeFilesFailedToReadSource,
+                Some(src.to_string()),
+            ))
+        }
+    };
+
+    for entry in entries {
+        let entry = match entry {  // Shadowing
+            Ok(entry) => entry,  // Double shadowing! :0
+            Err(src) => {
+                return Err((
+                    PomErrorCode::ProjectGenerationTargetFreeFilesInvalidEntry,
+                    Some(src.to_string()),
+                ));
+            }
+        };
+
+        let entry_path = entry.path();
+
+        if !entry_path.is_file() {
+            continue;  // Only copy files, ignore subdirs
+        }
+
+        let file_name = match entry_path.file_name() {
+            Some(file_name) => file_name,
+            None => continue,  // Can't happen with default files
+        };
+
+        let destination_path = project_root.join(file_name);
+
+        if destination_path.exists() {
+            return Err((
+                PomErrorCode::ProjectGenerationFileAlreadyExists,
+                Some(format!("`{}` already exists.", destination_path.display())),
+            ));
+        }
+
+        match fs::copy(&entry_path, &destination_path) {
+            Ok(_) => { file_count += 1; }
+            Err(src) => {
+                return Err((
+                    PomErrorCode::ProjectGenerationFailedToCopyRefFile,
+                    Some(format!("{}: {}", entry_path.display(), src))
+                ));
+            }
+        }
+    }
+
+    Ok(file_count)
+}
 
 #[cfg(test)]
 mod tests{

@@ -27,6 +27,12 @@ pub enum PomErrorCode {
     ProjectGenerationFailedToSerializePomToml = 33,
     ProjectGenerationFailedToCreatePomToml = 34,
     ProjectGenerationPomTomlFileWriteFailed = 35,
+    ProjectGenerationTargetFreeFilesDefaultMissing = 36,
+    ProjectGenerationTargetFreeFilesFailedToReadSource = 37,
+    ProjectGenerationTargetFreeFilesInvalidEntry = 38,
+    ProjectGenerationFileAlreadyExists = 39,
+    ProjectGenerationFailedToCopyRefFile = 40,
+    ProjectGenerationTargetFreeFilesDefaultSourceEmpty = 41,
 }
 
 impl PomErrorCode {
@@ -57,6 +63,12 @@ impl PomErrorCode {
             PomErrorCode::ProjectGenerationFailedToSerializePomToml => "Failed to serialize project settings for `pom.toml`",
             PomErrorCode::ProjectGenerationFailedToCreatePomToml => "Failed to create `pom.toml`.",
             PomErrorCode::ProjectGenerationPomTomlFileWriteFailed => "Successfully created `pom.toml` but failed to fill it.",
+            PomErrorCode::ProjectGenerationTargetFreeFilesDefaultMissing => "The default source for target-free files is missing.",
+            PomErrorCode::ProjectGenerationTargetFreeFilesFailedToReadSource => "Can't read content in target-free files source directory.",
+            PomErrorCode::ProjectGenerationTargetFreeFilesInvalidEntry => "Found an invalid entry in target-free files source directory.",
+            PomErrorCode::ProjectGenerationFileAlreadyExists => "Tried to create a file that already exists",
+            PomErrorCode::ProjectGenerationFailedToCopyRefFile => "Failed to copy a file.",
+            PomErrorCode::ProjectGenerationTargetFreeFilesDefaultSourceEmpty => "The default source for target-free files is empty.",
             // Non fatal errors fallback
             _ => "Internal: missing config source was handled as fatal. This is a Pom bug.",
 
