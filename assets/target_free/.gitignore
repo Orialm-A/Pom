@@ -1,0 +1,15 @@
+# Build outputs
+build/
+sdkconfig
+sdkconfig.old
+
+# Doxygen output
+resources/doc/project/
+
+# Kate
+*.kate-swp
+
+# Working files
+CODING_RECOMMENDATION.md
+notebook_research.*
+notebook_development.*

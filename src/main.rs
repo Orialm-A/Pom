@@ -1,5 +1,9 @@
 mod cli;
 mod pom_api;
+mod project_create;
+mod prompt;
+mod errors;
+mod read_config_files;
 
 use clap::Parser;
 use crate::cli::TopLevelCommands::*;
@@ -13,7 +17,11 @@ fn main() {
 
     match command_line {
         Project { project_command } => match project_command {
-            Proj::Create { project_name } => api::project_create_function(project_name),
+            Proj::Create {
+                project_name,
+                path,
+                dry_run
+            } => api::project_create_function(project_name, path, dry_run),
             Proj::Rename { new_project_name } => api::project_rename_function(new_project_name),
             Proj::Config => api::project_config_function(),
         },

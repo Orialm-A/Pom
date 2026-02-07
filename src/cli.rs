@@ -1,4 +1,6 @@
 use clap::{Parser, Subcommand};
+use std::path::PathBuf;
+
 
 #[derive(Parser, Debug)]
 #[command(name = "pom")]
@@ -36,8 +38,18 @@ pub enum TopLevelCommands {
 
 #[derive(Subcommand, Debug)]
 pub enum ProjectCommands {
-    /// Create a new project (name will be prompted of omitted)
-    Create { project_name: Option<String> },
+    /// Create a new project (name and options will be prompted of omitted)
+    Create {
+        /// Project name
+        #[arg(value_name = "NAME")]
+        project_name: Option<String>,
+        /// Path where the project will be created
+        #[arg(short, long, value_name = "PATH")]
+        path: Option<PathBuf>,
+        /// Print what would be done without creating / modifying files
+        #[arg(short = 'n', long, )]
+        dry_run: bool,
+    },
     /// Rename the current project. Fail if current directory is not a pom project
     Rename { new_project_name: Option<String> },
     /// Open the configuration menu for the project
