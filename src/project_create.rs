@@ -306,71 +306,58 @@ fn get_module_level_spec(generation_layout_entry: &GenerationLayoutEntry) -> Opt
 fn generate_doc_groups_file(project_root: &Path, groups_list: &[DoxygenGroup]) -> PomResult<()> {
     let doc_groups_file_path = project_root.join("doc_groups.h");
 
-    let mut file = match File::create_new(&doc_groups_file_path) {
-        Ok(f) => f,
-        Err(src) => {
-            return Err((
-                PomErrorCode::DocGroupFileCreationFail,
-                Some(src.to_string()),
-            ));
-        }
-    };
-
-    let mut file_content = String::new();
-
+    let mut doc_groups_file_content = String::new();
     for group in groups_list {
-        file_content.push_str(&generate_group_block(group));
+        doc_groups_file_content.push_str(&generate_group_block(group));
     }
 
-    match file.write_all(file_content.as_bytes()) {
-        Ok(()) => {}
-        Err(src) => {
-            return Err((
-                PomErrorCode::DocGroupFileWriteFail,
-                Some(src.to_string()),
-            ));
-        }
+    match write_file(&doc_groups_file_path, &doc_groups_file_content) {
+        Ok(()) => Ok(()),
+        Err(e) => Err(e),
     }
-
-    Ok(())
 }
 
 
 fn generate_pom_toml_file(project_root: &Path, module_levels_list: &HashMap<String, ModuleLevelSpec>) -> PomResult<()> {
+    let pom_toml_file_path = project_root.join("pom.toml");
 
     let pom_toml = PomToml {
-        levels: module_levels_list/*.clone()*/,
+        levels: module_levels_list,
     };
-    let pom_toml_file_string = toml::to_string_pretty(&pom_toml).map_err(
+    let pom_toml_file_content = toml::to_string_pretty(&pom_toml).map_err(
         |err| (
             PomErrorCode::PomTomlFileSerializationFail,
             Some(err.to_string())
         )
     )?;
 
-    let pom_toml_file_path = project_root.join("pom.toml");
+    match write_file(&pom_toml_file_path, &pom_toml_file_content) {
+        Ok(()) => Ok(()),
+        Err(e) => Err(e),
+    }
+}
 
-    let mut file = match File::create_new(&pom_toml_file_path) {
+
+fn write_file(file_path: &Path, file_content: &str)  -> PomResult<()>  {
+    let mut file = match File::create_new(file_path) {
         Ok(f) => f,
         Err(src) => {
             return Err((
-                PomErrorCode::PomTomlFileCreationFail,
+                PomErrorCode::FileCreationFail,
                 Some(src.to_string()),
             ));
         }
     };
 
-    match file.write_all(pom_toml_file_string.as_bytes()) {
-        Ok(()) => {}
+    match file.write_all(file_content.as_bytes()){
+        Ok(()) => { Ok(()) }
         Err(src) => {
-            return Err((
-                PomErrorCode::PomTomlFileWriteFail,
+            Err((
+                PomErrorCode::FileWriteFail,
                 Some(src.to_string()),
-            ));
+            ))
         }
     }
-
-    Ok(())
 }
 
 
@@ -495,7 +482,8 @@ mod tests{
     use super::*;
     use std::fs::{self, File};
     use std::path::Path;
-    use std::io::Read;
+    use std::io::{Read, Write};
+
 
     mod root_creation {
         use super::*;
@@ -716,6 +704,102 @@ mod tests{
             assert!(contents.contains("@defgroup"));
             assert!(contents.contains("app"));
             assert!(contents.contains("hld"));
+        }
+    }
+
+    mod target_free_files_tests {
+        use super::*;
+
+        fn code_of<T>(r: PomResult<T>) -> PomErrorCode {
+            match r {
+                Ok(_) => panic!("expected Err, got Ok"),
+                Err((code, _)) => code,
+            }
+        }
+
+        #[test]
+        fn core_copies_files_to_project_root() {
+            let tmp = tempfile::tempdir().unwrap();
+            let project_root = tmp.path();
+
+            let src_tmp = tempfile::tempdir().unwrap();
+            let source_dir = src_tmp.path();
+
+            // Create 2 files in source
+            let mut f1 = File::create(source_dir.join(".gitignore")).unwrap();
+            writeln!(f1, "hello").unwrap();
+
+            let mut f2 = File::create(source_dir.join("Doxyfile")).unwrap();
+            writeln!(f2, "world").unwrap();
+
+            let count = copy_target_free_files_core_logic(project_root, source_dir).unwrap();
+            assert_eq!(count, 2);
+
+            assert!(project_root.join(".gitignore").is_file());
+            assert!(project_root.join("Doxyfile").is_file());
+        }
+
+        #[test]
+        fn core_ignores_subdirectories() {
+            let tmp = tempfile::tempdir().unwrap();
+            let project_root = tmp.path();
+
+            let src_tmp = tempfile::tempdir().unwrap();
+            let source_dir = src_tmp.path();
+
+            // file + subdir + file inside subdir
+            File::create(source_dir.join(".clang-format")).unwrap();
+            fs::create_dir_all(source_dir.join("nested")).unwrap();
+            File::create(source_dir.join("nested").join("should_not_copy")).unwrap();
+
+            let count = copy_target_free_files_core_logic(project_root, source_dir).unwrap();
+            assert_eq!(count, 1);
+
+            assert!(project_root.join(".clang-format").is_file());
+            assert!(!project_root.join("nested").exists());
+            assert!(!project_root.join("should_not_copy").exists());
+        }
+
+        #[test]
+        fn core_returns_zero_when_source_is_empty() {
+            let tmp = tempfile::tempdir().unwrap();
+            let project_root = tmp.path();
+
+            let src_tmp = tempfile::tempdir().unwrap();
+            let source_dir = src_tmp.path();
+
+            let count = copy_target_free_files_core_logic(project_root, source_dir).unwrap();
+            assert_eq!(count, 0);
+        }
+
+        #[test]
+        fn core_fails_if_destination_already_exists() {
+            let tmp = tempfile::tempdir().unwrap();
+            let project_root = tmp.path();
+
+            let src_tmp = tempfile::tempdir().unwrap();
+            let source_dir = src_tmp.path();
+
+            // Source has a file named ".gitignore"
+            File::create(source_dir.join(".gitignore")).unwrap();
+
+            // Destination already has ".gitignore"
+            File::create(project_root.join(".gitignore")).unwrap();
+
+            let err = copy_target_free_files_core_logic(project_root, source_dir).unwrap_err();
+            assert_eq!(err.0, PomErrorCode::TargetFreeFilesAlreadyExists);
+        }
+
+        #[test]
+        fn core_fails_when_source_dir_missing() {
+            let tmp = tempfile::tempdir().unwrap();
+            let project_root = tmp.path();
+
+            // A path that does not exist
+            let source_dir = project_root.join("does_not_exist");
+
+            let err = copy_target_free_files_core_logic(project_root, &source_dir).unwrap_err();
+            assert_eq!(err.0, PomErrorCode::TargetFreeFilesSourceReadFail);
         }
     }
 }

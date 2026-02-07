@@ -22,13 +22,11 @@ pub enum PomErrorCode {
     GenerationLayoutFileInvalidEntryPath = 24,
     // subdirectories errors: 3x
     SubDirsCreationFail = 30,
-    // `doc_groups.h` file errors: 4x
-    DocGroupFileCreationFail = 40,
-    DocGroupFileWriteFail = 41,
+    // File creation errors: 4x
+    FileCreationFail = 40,
+    FileWriteFail = 41,
     // `pom.toml` file errors: 5x
     PomTomlFileSerializationFail = 50,
-    PomTomlFileCreationFail = 51,
-    PomTomlFileWriteFail = 52,
     // Target-free files errors: 6x
     TargetFreeFilesDefaultSourceMissing = 60,
     TargetFreeFilesSourceReadFail = 61,
@@ -61,13 +59,11 @@ impl PomErrorCode {
             PomErrorCode::GenerationLayoutFileInvalidEntryPath => "The field `path` of a generation layout entry is invalid, failed to extract its name.",
             // subdirectories errors: 3x
             PomErrorCode::SubDirsCreationFail => "Failed to create a subdir for the project.",
-            // `doc_groups.h` file errors: 4x
-            PomErrorCode::DocGroupFileCreationFail => "Failed to create `doc_groups.h`.",
-            PomErrorCode::DocGroupFileWriteFail => "Successfully created `doc_groups.h` but failed to fill it.",
+            // File creation errors: 4x
+            PomErrorCode::FileCreationFail => "Failed to create a file.",
+            PomErrorCode::FileWriteFail => "Successfully created a file but failed to fill it.",
             // `pom.toml` file errors: 5x
             PomErrorCode::PomTomlFileSerializationFail => "Failed to serialize project settings for `pom.toml`",
-            PomErrorCode::PomTomlFileCreationFail => "Failed to create `pom.toml`.",
-            PomErrorCode::PomTomlFileWriteFail => "Successfully created `pom.toml` but failed to fill it.",
             // Target-free files errors: 6x
             PomErrorCode::TargetFreeFilesDefaultSourceMissing => "The default source for target-free files is missing.",
             PomErrorCode::TargetFreeFilesSourceReadFail => "Can't read content in target-free files source directory.",
