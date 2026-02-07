@@ -20,10 +20,13 @@ pub enum PomErrorCode {
     GenerationLayoutFileCantParse = 22,
     GenerationLayoutFileCouldNotFindAny = 23,
     GenerationLayoutFileInvalidEntryPath = 24,
-    // File system generation errors: 3x
+    // Project generation errors: 3x
     ProjectGenerationFailedToCreateSubDir = 30,
     ProjectGenerationFailedToCreateDocGroups = 31,
     ProjectGenerationGroupsFileWriteFailed = 32,
+    ProjectGenerationFailedToSerializePomToml = 33,
+    ProjectGenerationFailedToCreatePomToml = 34,
+    ProjectGenerationPomTomlFileWriteFailed = 35,
 }
 
 impl PomErrorCode {
@@ -47,10 +50,14 @@ impl PomErrorCode {
             PomErrorCode::GenerationLayoutFileCantParse => "Found a dir tree config file but failed to parse it.",
             PomErrorCode::GenerationLayoutFileCouldNotFindAny => "Did not found any dir tree config file.",
             PomErrorCode::GenerationLayoutFileInvalidEntryPath => "The field `path` of a generation layout entry is invalid, failed to extract its name.",
-            // File system generation errors: 3x
+            // Project generation errors: 3x
             PomErrorCode::ProjectGenerationFailedToCreateSubDir => "Failed to create a subdir for the project.",
             PomErrorCode::ProjectGenerationFailedToCreateDocGroups => "Failed to create `doc_groups.h`.",
             PomErrorCode::ProjectGenerationGroupsFileWriteFailed => "Successfully created `doc_groups.h` but failed to fill it.",
+            PomErrorCode::ProjectGenerationFailedToSerializePomToml => "Failed to serialize project settings for `pom.toml`",
+            PomErrorCode::ProjectGenerationFailedToCreatePomToml => "Failed to create `pom.toml`.",
+            PomErrorCode::ProjectGenerationPomTomlFileWriteFailed => "Successfully created `pom.toml` but failed to fill it.",
+            // Non fatal errors fallback
             _ => "Internal: missing config source was handled as fatal. This is a Pom bug.",
 
         }

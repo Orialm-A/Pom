@@ -7,6 +7,9 @@ use crate::read_config_files::{read_generation_layout, GenerationLayoutEntry};
 use convert_case::{Case, Casing};
 use std::fs::File;
 use std::io::prelude::*;
+use std::collections::HashMap;
+use serde::Serialize;
+
 
 
 #[derive(Debug)]
@@ -16,12 +19,25 @@ struct DoxygenGroup {
     brief: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct ModuleLevelSpec {
+    pub path: String, // Store paths relatively to project root to ensure portability across different computers (`git clone`)
+    pub prefix: Option<String>,
+}
 
 struct ResolvedProjectLayout {
     dirs: Vec<PathBuf>,
     names: Vec<String>,
     doxygen_groups: Vec<DoxygenGroup>,
+    module_levels: HashMap<String, ModuleLevelSpec>,
 }
+
+#[derive(Debug, Serialize)]
+pub struct PomToml<'a> {
+    pub levels: &'a HashMap<String, ModuleLevelSpec>,
+    // Add other project data to save here
+}
+
 
 
 pub fn project_create(
@@ -50,21 +66,21 @@ pub fn project_create(
 
     let (project_name, project_name_normalized) = get_project_name(project_name_parameter);
 
-    let project_dir = project_root.join(&project_name_normalized);
+    let project_root = project_root.join(&project_name_normalized);
 
     println!(
         "Generate project directory `{}`...",
-        project_dir.display()
+        project_root.display()
     );
 
     if !dry_run {
-        match create_root_dir(&project_dir) {
+        match create_root_dir(&project_root) {
             Ok(()) => {},
             Err((error_code, src)) => {error_code.handler(src.as_deref()); }
         }
     }
 
-    let resolved_project_layout = match resolve_project_layout(&project_dir, &generation_layout) {
+    let resolved_project_layout = match resolve_project_layout(&project_root, &generation_layout) {
         Ok(extracted_resolved_project_layout) => { extracted_resolved_project_layout },
         Err((error_code, src)) => { error_code.handler(src.as_deref()); }
     };
@@ -79,7 +95,15 @@ pub fn project_create(
 
     println!("Generate `doc_groups.h`...");
     if !dry_run {
-        match generate_doc_groups_file(&project_dir, &resolved_project_layout.doxygen_groups) {
+        match generate_doc_groups_file(&project_root, &resolved_project_layout.doxygen_groups) {
+            Ok(()) => {},
+            Err((error_code, src)) => {error_code.handler(src.as_deref()); }
+        }
+    }
+
+    println!("Generate `pom.toml`...");
+    if !dry_run {
+        match generate_pom_toml_file(&project_root, &resolved_project_layout.module_levels) {
             Ok(()) => {},
             Err((error_code, src)) => {error_code.handler(src.as_deref()); }
         }
@@ -144,12 +168,12 @@ fn get_project_name(project_name_parameter: Option<String>) -> (String, String) 
 }
 
 
-fn create_root_dir(project_dir: &Path) -> PomResult<()> {  // `PathBuf` owns memory, `Path` is a borrowed view
+fn create_root_dir(project_root: &Path) -> PomResult<()> {  // `PathBuf` owns memory, `Path` is a borrowed view
 
-    if project_dir.exists() {
-        let show_path = format!("Check `{}`.", project_dir.display().to_string());
-        if project_dir.is_dir() {
-            match project_dir.read_dir() {
+    if project_root.exists() {
+        let show_path = format!("Check `{}`.", project_root.display().to_string());
+        if project_root.is_dir() {
+            match project_root.read_dir() {
                 Ok(mut entries) => {
                     if entries.next().is_some() {
                         return Err((PomErrorCode::PathToProjectRootNotEmpty, Some(show_path)));
@@ -168,7 +192,7 @@ fn create_root_dir(project_dir: &Path) -> PomResult<()> {  // `PathBuf` owns mem
         }
     }
 
-    match fs::create_dir_all(project_dir) {
+    match fs::create_dir_all(project_root) {
         Ok(()) => Ok(()),
         Err(src) => {
             let details = format!("{:?}", src);
@@ -178,15 +202,16 @@ fn create_root_dir(project_dir: &Path) -> PomResult<()> {  // `PathBuf` owns mem
 }
 
 
-fn resolve_project_layout(project_dir: &Path, generation_layout: &[GenerationLayoutEntry]) -> PomResult<ResolvedProjectLayout> {
+fn resolve_project_layout(project_root: &Path, generation_layout: &[GenerationLayoutEntry]) -> PomResult<ResolvedProjectLayout> {
 
     let mut subdirs_list: Vec<PathBuf> = Vec::new();
     let mut names_list: Vec<String> = Vec::new();
     let mut doxygen_groups_list: Vec<DoxygenGroup> = Vec::new();
+    let mut module_levels_map: HashMap<String, ModuleLevelSpec> = HashMap::new();
 
     for generation_layout_entry in generation_layout {
 
-        let subdir_full_path: PathBuf = project_dir.join(&generation_layout_entry.path);
+        let subdir_full_path: PathBuf = project_root.join(&generation_layout_entry.path);
 
 
         let dir_name = match get_dir_name(&subdir_full_path) {
@@ -199,13 +224,18 @@ fn resolve_project_layout(project_dir: &Path, generation_layout: &[GenerationLay
             doxygen_groups_list.push(group);
         }
 
+        if let Some(module_level_spec) = get_module_level_spec(&generation_layout_entry) {
+            module_levels_map.insert(dir_name.to_string(), module_level_spec);
+        }
+
         subdirs_list.push(subdir_full_path);
     }
 
     Ok( ResolvedProjectLayout{
         dirs: subdirs_list,
         names: names_list,
-        doxygen_groups: doxygen_groups_list
+        doxygen_groups: doxygen_groups_list,
+        module_levels: module_levels_map,
     })
 }
 
@@ -255,6 +285,16 @@ fn get_doxygen_group(dir: &GenerationLayoutEntry, dir_name: &str) -> Option<Doxy
 }
 
 
+fn get_module_level_spec(generation_layout_entry: &GenerationLayoutEntry) -> Option<ModuleLevelSpec> {
+    if generation_layout_entry.contains_modules {
+        Some(ModuleLevelSpec {
+            path: generation_layout_entry.path.to_string(),
+            prefix: generation_layout_entry.module_prefix.clone(),
+        })
+    } else { None }
+}
+
+
 fn generate_doc_groups_file(project_root: &Path, groups_list: &[DoxygenGroup]) -> PomResult<()> {
     let doc_groups_file_path = project_root.join("doc_groups.h");
 
@@ -279,6 +319,44 @@ fn generate_doc_groups_file(project_root: &Path, groups_list: &[DoxygenGroup]) -
         Err(src) => {
             return Err((
                 PomErrorCode::ProjectGenerationGroupsFileWriteFailed,
+                Some(src.to_string()),
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+
+fn generate_pom_toml_file(project_root: &Path, module_levels_list: &HashMap<String, ModuleLevelSpec>) -> PomResult<()> {
+
+    let pom_toml = PomToml {
+        levels: module_levels_list/*.clone()*/,
+    };
+    let pom_toml_file_string = toml::to_string_pretty(&pom_toml).map_err(
+        |err| (
+            PomErrorCode::ProjectGenerationFailedToSerializePomToml,
+            Some(err.to_string())
+        )
+    )?;
+
+    let pom_toml_file_path = project_root.join("pom.toml");
+
+    let mut file = match File::create_new(&pom_toml_file_path) {
+        Ok(f) => f,
+        Err(src) => {
+            return Err((
+                PomErrorCode::ProjectGenerationFailedToCreatePomToml,
+                Some(src.to_string()),
+            ));
+        }
+    };
+
+    match file.write_all(pom_toml_file_string.as_bytes()) {
+        Ok(()) => {}
+        Err(src) => {
+            return Err((
+                PomErrorCode::ProjectGenerationPomTomlFileWriteFailed,
                 Some(src.to_string()),
             ));
         }
