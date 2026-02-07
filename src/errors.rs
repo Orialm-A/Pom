@@ -20,19 +20,22 @@ pub enum PomErrorCode {
     GenerationLayoutFileCantParse = 22,
     GenerationLayoutFileCouldNotFindAny = 23,
     GenerationLayoutFileInvalidEntryPath = 24,
-    // Project generation errors: 3x
-    ProjectGenerationFailedToCreateSubDir = 30,
-    ProjectGenerationFailedToCreateDocGroups = 31,
-    ProjectGenerationGroupsFileWriteFailed = 32,
-    ProjectGenerationFailedToSerializePomToml = 33,
-    ProjectGenerationFailedToCreatePomToml = 34,
-    ProjectGenerationPomTomlFileWriteFailed = 35,
-    ProjectGenerationTargetFreeFilesDefaultMissing = 36,
-    ProjectGenerationTargetFreeFilesFailedToReadSource = 37,
-    ProjectGenerationTargetFreeFilesInvalidEntry = 38,
-    ProjectGenerationFileAlreadyExists = 39,
-    ProjectGenerationFailedToCopyRefFile = 40,
-    ProjectGenerationTargetFreeFilesDefaultSourceEmpty = 41,
+    // subdirectories errors: 3x
+    SubDirsCreationFail = 30,
+    // `doc_groups.h` file errors: 4x
+    DocGroupFileCreationFail = 40,
+    DocGroupFileWriteFail = 41,
+    // `pom.toml` file errors: 5x
+    PomTomlFileSerializationFail = 50,
+    PomTomlFileCreationFail = 51,
+    PomTomlFileWriteFail = 52,
+    // Target-free files errors: 6x
+    TargetFreeFilesDefaultSourceMissing = 60,
+    TargetFreeFilesSourceReadFail = 61,
+    TargetFreeFilesInvalidEntry = 62,
+    TargetFreeFilesAlreadyExists = 63,
+    TargetFreeFilesCopyFail = 64,
+    TargetFreeFilesDefaultSourceEmpty = 65,
 }
 
 impl PomErrorCode {
@@ -56,19 +59,22 @@ impl PomErrorCode {
             PomErrorCode::GenerationLayoutFileCantParse => "Found a dir tree config file but failed to parse it.",
             PomErrorCode::GenerationLayoutFileCouldNotFindAny => "Did not found any dir tree config file.",
             PomErrorCode::GenerationLayoutFileInvalidEntryPath => "The field `path` of a generation layout entry is invalid, failed to extract its name.",
-            // Project generation errors: 3x
-            PomErrorCode::ProjectGenerationFailedToCreateSubDir => "Failed to create a subdir for the project.",
-            PomErrorCode::ProjectGenerationFailedToCreateDocGroups => "Failed to create `doc_groups.h`.",
-            PomErrorCode::ProjectGenerationGroupsFileWriteFailed => "Successfully created `doc_groups.h` but failed to fill it.",
-            PomErrorCode::ProjectGenerationFailedToSerializePomToml => "Failed to serialize project settings for `pom.toml`",
-            PomErrorCode::ProjectGenerationFailedToCreatePomToml => "Failed to create `pom.toml`.",
-            PomErrorCode::ProjectGenerationPomTomlFileWriteFailed => "Successfully created `pom.toml` but failed to fill it.",
-            PomErrorCode::ProjectGenerationTargetFreeFilesDefaultMissing => "The default source for target-free files is missing.",
-            PomErrorCode::ProjectGenerationTargetFreeFilesFailedToReadSource => "Can't read content in target-free files source directory.",
-            PomErrorCode::ProjectGenerationTargetFreeFilesInvalidEntry => "Found an invalid entry in target-free files source directory.",
-            PomErrorCode::ProjectGenerationFileAlreadyExists => "Tried to create a file that already exists",
-            PomErrorCode::ProjectGenerationFailedToCopyRefFile => "Failed to copy a file.",
-            PomErrorCode::ProjectGenerationTargetFreeFilesDefaultSourceEmpty => "The default source for target-free files is empty.",
+            // subdirectories errors: 3x
+            PomErrorCode::SubDirsCreationFail => "Failed to create a subdir for the project.",
+            // `doc_groups.h` file errors: 4x
+            PomErrorCode::DocGroupFileCreationFail => "Failed to create `doc_groups.h`.",
+            PomErrorCode::DocGroupFileWriteFail => "Successfully created `doc_groups.h` but failed to fill it.",
+            // `pom.toml` file errors: 5x
+            PomErrorCode::PomTomlFileSerializationFail => "Failed to serialize project settings for `pom.toml`",
+            PomErrorCode::PomTomlFileCreationFail => "Failed to create `pom.toml`.",
+            PomErrorCode::PomTomlFileWriteFail => "Successfully created `pom.toml` but failed to fill it.",
+            // Target-free files errors: 6x
+            PomErrorCode::TargetFreeFilesDefaultSourceMissing => "The default source for target-free files is missing.",
+            PomErrorCode::TargetFreeFilesSourceReadFail => "Can't read content in target-free files source directory.",
+            PomErrorCode::TargetFreeFilesInvalidEntry => "Found an invalid entry in target-free files source directory.",
+            PomErrorCode::TargetFreeFilesAlreadyExists => "Tried to create a file that already exists",
+            PomErrorCode::TargetFreeFilesCopyFail => "Failed to copy a file.",
+            PomErrorCode::TargetFreeFilesDefaultSourceEmpty => "The default source for target-free files is empty.",
             // Non fatal errors fallback
             _ => "Internal: missing config source was handled as fatal. This is a Pom bug.",
 

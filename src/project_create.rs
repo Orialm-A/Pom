@@ -254,7 +254,7 @@ fn create_sub_dirs(dirs_path_list: &[PathBuf]) -> PomResult<()> {
             Ok(()) => { continue },
             Err(src) => {
                 return Err((
-                    PomErrorCode::ProjectGenerationFailedToCreateSubDir,
+                    PomErrorCode::SubDirsCreationFail,
                     Some(format!("{}: {}", subdir_path.display(), src))
                 ));
             }
@@ -310,7 +310,7 @@ fn generate_doc_groups_file(project_root: &Path, groups_list: &[DoxygenGroup]) -
         Ok(f) => f,
         Err(src) => {
             return Err((
-                PomErrorCode::ProjectGenerationFailedToCreateDocGroups,
+                PomErrorCode::DocGroupFileCreationFail,
                 Some(src.to_string()),
             ));
         }
@@ -326,7 +326,7 @@ fn generate_doc_groups_file(project_root: &Path, groups_list: &[DoxygenGroup]) -
         Ok(()) => {}
         Err(src) => {
             return Err((
-                PomErrorCode::ProjectGenerationGroupsFileWriteFailed,
+                PomErrorCode::DocGroupFileWriteFail,
                 Some(src.to_string()),
             ));
         }
@@ -343,7 +343,7 @@ fn generate_pom_toml_file(project_root: &Path, module_levels_list: &HashMap<Stri
     };
     let pom_toml_file_string = toml::to_string_pretty(&pom_toml).map_err(
         |err| (
-            PomErrorCode::ProjectGenerationFailedToSerializePomToml,
+            PomErrorCode::PomTomlFileSerializationFail,
             Some(err.to_string())
         )
     )?;
@@ -354,7 +354,7 @@ fn generate_pom_toml_file(project_root: &Path, module_levels_list: &HashMap<Stri
         Ok(f) => f,
         Err(src) => {
             return Err((
-                PomErrorCode::ProjectGenerationFailedToCreatePomToml,
+                PomErrorCode::PomTomlFileCreationFail,
                 Some(src.to_string()),
             ));
         }
@@ -364,7 +364,7 @@ fn generate_pom_toml_file(project_root: &Path, module_levels_list: &HashMap<Stri
         Ok(()) => {}
         Err(src) => {
             return Err((
-                PomErrorCode::ProjectGenerationPomTomlFileWriteFailed,
+                PomErrorCode::PomTomlFileWriteFail,
                 Some(src.to_string()),
             ));
         }
@@ -409,7 +409,7 @@ fn copy_target_free_files(project_root: &Path) -> PomResult<()> {
 
         if !source_path.exists() {
             if files_source == default_source {
-                return Err((PomErrorCode::ProjectGenerationTargetFreeFilesDefaultMissing, None));
+                return Err((PomErrorCode::TargetFreeFilesDefaultSourceMissing, None));
             }
         }
 
@@ -419,7 +419,7 @@ fn copy_target_free_files(project_root: &Path) -> PomResult<()> {
                     if files_source == default_source {
                     // Should never get here!
                     // If no file has been copied from the default source, it means `assets/target_free` is empty: The repository has an issue, or the build output has an issue.
-                    return Err((PomErrorCode::ProjectGenerationTargetFreeFilesDefaultSourceEmpty, None));
+                    return Err((PomErrorCode::TargetFreeFilesDefaultSourceEmpty, None));
                     } else {
                         continue;  // High priority empty, fall back to lower
                     }
@@ -439,7 +439,7 @@ fn copy_target_free_files_core_logic(project_root: &Path, source_path: &Path) ->
         Ok(extracted_entries) => extracted_entries,
         Err(src) => {
             return Err((
-                PomErrorCode::ProjectGenerationTargetFreeFilesFailedToReadSource,
+                PomErrorCode::TargetFreeFilesSourceReadFail,
                 Some(src.to_string()),
             ))
         }
@@ -450,7 +450,7 @@ fn copy_target_free_files_core_logic(project_root: &Path, source_path: &Path) ->
             Ok(entry) => entry,  // Double shadowing! :0
             Err(src) => {
                 return Err((
-                    PomErrorCode::ProjectGenerationTargetFreeFilesInvalidEntry,
+                    PomErrorCode::TargetFreeFilesInvalidEntry,
                     Some(src.to_string()),
                 ));
             }
@@ -471,7 +471,7 @@ fn copy_target_free_files_core_logic(project_root: &Path, source_path: &Path) ->
 
         if destination_path.exists() {
             return Err((
-                PomErrorCode::ProjectGenerationFileAlreadyExists,
+                PomErrorCode::TargetFreeFilesAlreadyExists,
                 Some(format!("`{}` already exists.", destination_path.display())),
             ));
         }
@@ -480,7 +480,7 @@ fn copy_target_free_files_core_logic(project_root: &Path, source_path: &Path) ->
             Ok(_) => { file_count += 1; }
             Err(src) => {
                 return Err((
-                    PomErrorCode::ProjectGenerationFailedToCopyRefFile,
+                    PomErrorCode::TargetFreeFilesCopyFail,
                     Some(format!("{}: {}", entry_path.display(), src))
                 ));
             }
@@ -607,7 +607,7 @@ mod tests{
             ];
 
             let err = create_sub_dirs(&dirs).unwrap_err();
-            assert_eq!(err.0, PomErrorCode::ProjectGenerationFailedToCreateSubDir);
+            assert_eq!(err.0, PomErrorCode::SubDirsCreationFail);
         }
     }
 
