@@ -21,7 +21,7 @@ pub enum PomErrorCode {
     GenerationLayoutFileCouldNotFindAny = 23,
     GenerationLayoutFileInvalidEntryPath = 24,
     // subdirectories errors: 3x
-    SubDirsCreationFail = 30,
+    SubDirsCreationFail = 30,               // E
     // File creation errors: 4x
     FileCreationFail = 40,
     FileWriteFail = 41,
@@ -30,17 +30,26 @@ pub enum PomErrorCode {
     // Target-free files errors: 6x
     TargetFreeFilesDefaultSourceMissing = 60,
     TargetFreeFilesSourceReadFail = 61,     // A
-    TargetFreeFilesInvalidEntry = 62,       // B
+    TargetFreeFilesInvalidEntry = 62,       // B - Entries when exploring dir (recur. or not)
     TargetFreeFilesAlreadyExists = 63,
-    TargetFreeFilesCopyFail = 64,
+    TargetFreeFilesCopyFail = 64,           // F
     TargetFreeFilesDefaultSourceEmpty = 65, // C
     // Target files errors: 7x
     TargetSelectionFail = 70,
     TargetFilesSourceReadFail = 71,         // A
-    TargetFilesInvalidEntry = 72,           // B
+    TargetFilesInvalidEntry = 72,           // B - Has nothing to do with 24 but same name :/
     TargetFilesDefaultSourceEmpty = 75,     // C
 
-                                            // A, B, C -> Refactor directory access?
+    TargetFilesSourceMissing = 76,
+    TargetFilesSourceNotDir = 77,
+    TargetFilesCreateDirFail = 78,          // E
+    TargetFilesStripPrefixFail = 79,
+    TargetFilesAlreadyExists = 80,
+    TargetFilesCopyFail = 81,               // F
+
+                                            // A, B, C  -> Refactor directory access
+                                            // E        -> Refactor directory creation
+                                            // F        -> Refactor file copy
 }
 
 impl PomErrorCode {
@@ -83,6 +92,12 @@ impl PomErrorCode {
             PomErrorCode::TargetFilesSourceReadFail => "Can't read content in target files source directory.",
             PomErrorCode::TargetFilesInvalidEntry => "Found an invalid entry in target files source directory.",
             PomErrorCode::TargetFilesDefaultSourceEmpty => "The default source for target files is empty.",
+            PomErrorCode::TargetFilesSourceMissing => "The path to target-specific files source does not exist.",
+            PomErrorCode::TargetFilesSourceNotDir => "The path to target-specific files source is not a dir",
+            PomErrorCode::TargetFilesCreateDirFail => "Failed to create a directory for target-specific files",
+            PomErrorCode::TargetFilesStripPrefixFail => "Failed to strip the prefix from the path to target-specific files source.",
+            PomErrorCode::TargetFilesAlreadyExists => "Tried to generate a target-specific file but it already exists.",
+            PomErrorCode::TargetFilesCopyFail => "Failed to copy a target-specific file.",
             // Non fatal errors fallback
             _ => "Internal: missing config source was handled as fatal. This is a Pom bug.",
 

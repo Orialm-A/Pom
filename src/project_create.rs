@@ -9,7 +9,7 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::collections::HashMap;
 use serde::Serialize;
-
+use walkdir::WalkDir;
 
 
 #[derive(Debug)]
@@ -119,6 +119,14 @@ pub fn project_create(
     if !dry_run {
         match copy_target_free_files(&project_root) {
             Ok(()) => {},
+            Err((error_code, src)) => {error_code.handler(src.as_deref()); }
+        }
+    }
+
+    println!("Generate target-specific files...");
+    if !dry_run {
+        match copy_target_dependent_files(&project_root, &project_target) {
+            Ok(_) => {},
             Err((error_code, src)) => {error_code.handler(src.as_deref()); }
         }
     }
@@ -551,6 +559,91 @@ fn copy_target_free_files_core_logic(project_root: &Path, source_path: &Path) ->
 
     Ok(file_count)
 }
+
+
+fn copy_target_dependent_files(project_root: &Path, target_source_root: &Path) -> PomResult<usize> {
+    if !target_source_root.exists() {
+        return Err((PomErrorCode::TargetFilesSourceMissing, Some(target_source_root.display().to_string())));
+    }
+    if !target_source_root.is_dir() {
+        return Err((PomErrorCode::TargetFilesSourceNotDir, Some(target_source_root.display().to_string())));
+    }
+
+    let mut file_count: usize = 0;
+
+    for entry in WalkDir::new(target_source_root).into_iter() {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(src) => {
+                return Err((
+                    PomErrorCode::TargetFilesInvalidEntry,
+                    Some(src.to_string()),
+                ));
+            }
+        };
+
+        let entry_path = entry.path();
+
+        // Create all met directories, to preserve empty dirs the user may create
+        if entry.file_type().is_dir() {
+            let relative_path = match entry_path.strip_prefix(target_source_root) {
+                Ok(relative_path) => relative_path, // Shadowing
+                Err(_) => continue,
+            };
+            if relative_path.as_os_str().is_empty() {
+                continue; // root itself
+            }
+            let destination_dir = project_root.join(relative_path);
+
+            match fs::create_dir_all(&destination_dir) {
+                Ok(()) => {},
+                Err(src) => {
+                    return Err((
+                        PomErrorCode::TargetFilesCreateDirFail,
+                        Some(format!("{}: {}", destination_dir.display(), src)),
+                    ));
+                }
+            }
+        }
+
+        if !entry.file_type().is_file() {
+            continue; // ignore symlinks
+        }
+
+        let relative_path = match entry_path.strip_prefix(target_source_root) {
+            Ok(relative_path) => relative_path,  // Shadowing
+            Err(src) => {
+                return Err((
+                    PomErrorCode::TargetFilesStripPrefixFail,
+                    Some(src.to_string()),
+                ));
+            }
+        };
+
+        let destination_path = project_root.join(relative_path);
+
+        if destination_path.exists() {
+            return Err((
+                PomErrorCode::TargetFilesAlreadyExists,
+                Some(format!("`{}` already exists.", destination_path.display())),
+            ));
+        }
+
+        match fs::copy(entry_path, &destination_path) {
+            Ok(_) => file_count += 1,
+            Err(src) => {
+                return Err((
+                    PomErrorCode::TargetFilesCopyFail,
+                    Some(format!("{}: {}", entry_path.display(), src)),
+                ));
+            }
+        }
+    }
+
+    Ok(file_count)
+}
+
+
 
 #[cfg(test)]
 mod tests{
