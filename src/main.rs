@@ -4,6 +4,7 @@ mod project_create;
 mod prompt;
 mod errors;
 mod read_config_files;
+mod filesystem;
 
 use clap::Parser;
 use crate::cli::TopLevelCommands::*;

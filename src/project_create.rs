@@ -10,6 +10,7 @@ use std::io::prelude::*;
 use std::collections::HashMap;
 use serde::Serialize;
 use walkdir::WalkDir;
+use crate::filesystem::create_directories;
 
 
 #[derive(Debug)]
@@ -93,7 +94,7 @@ pub fn project_create(
 
     println!("Generate subdirectories...");
     if !dry_run {
-        match create_sub_dirs(&resolved_project_layout.dirs) {
+        match create_directories(&resolved_project_layout.dirs) {
             Ok(()) => {},
             Err((error_code, src)) => {error_code.handler(src.as_deref()); }
         }
@@ -283,11 +284,10 @@ fn create_root_dir(project_root: &Path) -> PomResult<()> {  // `PathBuf` owns me
         }
     }
 
-    match fs::create_dir_all(project_root) {
+    match create_directories(project_root) {
         Ok(()) => Ok(()),
-        Err(src) => {
-            let details = format!("{:?}", src);
-            Err((PomErrorCode::PathToProjectRootFailedToCreateRoot, Some(details)))
+        Err((_, src)) => {
+            Err((PomErrorCode::PathToProjectRootFailedToCreateRoot, src))
         }
     }
 }
@@ -331,20 +331,20 @@ fn resolve_project_layout(project_root: &Path, generation_layout: &[GenerationLa
 }
 
 
-fn create_sub_dirs(dirs_path_list: &[PathBuf]) -> PomResult<()> {
-    for subdir_path in dirs_path_list {
-        match fs::create_dir_all(subdir_path) {
-            Ok(()) => { continue },
-            Err(src) => {
-                return Err((
-                    PomErrorCode::SubDirsCreationFail,
-                    Some(format!("{}: {}", subdir_path.display(), src))
-                ));
-            }
-        };
-    }
-    Ok(())
-}
+// fn create_directories(dirs_path_list: &[PathBuf]) -> PomResult<()> {
+//     for subdir_path in dirs_path_list {
+//         match fs::create_dir_all(subdir_path) {
+//             Ok(()) => { continue },
+//             Err(src) => {
+//                 return Err((
+//                     PomErrorCode::DirCreationFail,
+//                     Some(format!("{}: {}", subdir_path.display(), src))
+//                 ));
+//             }
+//         };
+//     }
+//     Ok(())
+// }
 
 
 fn get_dir_name(path: &Path) -> PomResult<&str> {
@@ -595,14 +595,9 @@ fn copy_target_dependent_files(project_root: &Path, target_source_root: &Path) -
             }
             let destination_dir = project_root.join(relative_path);
 
-            match fs::create_dir_all(&destination_dir) {
+            match create_directories(&destination_dir) {
                 Ok(()) => {},
-                Err(src) => {
-                    return Err((
-                        PomErrorCode::TargetFilesCreateDirFail,
-                        Some(format!("{}: {}", destination_dir.display(), src)),
-                    ));
-                }
+                Err(err) => return Err(err),
             }
         }
 
@@ -725,7 +720,7 @@ mod tests{
                 project_root.join("resources/doc"),
             ];
 
-            create_sub_dirs(&dirs).unwrap();
+            create_directories(&dirs).unwrap();
 
             assert!(project_root.join("src").is_dir());
             assert!(project_root.join("src/app").is_dir());
@@ -744,7 +739,7 @@ mod tests{
                 project_root.join("resources/doc"),
             ];
 
-            create_sub_dirs(&dirs).unwrap();
+            create_directories(&dirs).unwrap();
 
             assert!(project_root.join("src/app").is_dir());
             assert!(project_root.join("resources/doc").is_dir());
@@ -762,8 +757,8 @@ mod tests{
                 project_root.join("src/app"),
             ];
 
-            let err = create_sub_dirs(&dirs).unwrap_err();
-            assert_eq!(err.0, PomErrorCode::SubDirsCreationFail);
+            let err = create_directories(&dirs).unwrap_err();
+            assert_eq!(err.0, PomErrorCode::DirCreationFail);
         }
     }
 
