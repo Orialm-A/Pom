@@ -1,7 +1,7 @@
 use std::env;
 use std::path::{PathBuf, Path};
 use crate::errors::{PomErrorCode, PomResult};
-use crate::prompt::{prompt_if_missing_string, slugify_snake};
+use crate::prompt::{prompt_if_missing_string, slugify_snake, select_target};
 use std::fs;
 use crate::read_config_files::{read_generation_layout, GenerationLayoutEntry};
 use convert_case::{Case, Casing};
@@ -39,7 +39,6 @@ pub struct PomToml<'a> {
 }
 
 
-
 pub fn project_create(
     // The project name passed in the CLI
     project_name_parameter: Option<String>,
@@ -67,6 +66,11 @@ pub fn project_create(
     };
 
     let (project_name, project_name_normalized) = get_project_name(project_name_parameter);
+
+    let project_target = match get_project_target(project_target_parameter) {
+        Ok(project_target) => project_target,
+        Err((error_code, src)) => { error_code.handler(src.as_deref()); }
+    };
 
     let project_root = project_root.join(&project_name_normalized);
 
@@ -175,6 +179,75 @@ fn get_project_name(project_name_parameter: Option<String>) -> (String, String) 
     let project_name_normalized = slugify_snake(&project_name);
 
     (project_name, project_name_normalized)
+}
+
+
+fn get_project_target(project_target_parameter: Option<String>) -> PomResult<PathBuf> {
+    let project_target_parameter = match project_target_parameter {
+        Some(project_target_parameter) => project_target_parameter,
+        None => "".to_string(),
+    };
+
+    let default_source: &'static str= "assets/target";
+    let target_files_sources: [&str; 1] = [
+        default_source,
+    ];
+
+    let mut available_targets: HashMap<String, PathBuf> = HashMap::new();
+
+    for source_str in target_files_sources {
+        let source_path = Path::new(source_str);
+        let entries =  match fs::read_dir(source_path) {
+            Ok(entries) => entries,  // Shadowing
+            Err(src) => {
+                return Err((
+                    PomErrorCode::TargetFilesSourceReadFail,
+                    Some(src.to_string()),
+                ))
+            }
+        };
+
+        for entry in entries {
+            let entry = match entry {  // Shadowing
+                Ok(entry) => entry,  // Shadowing
+                Err(src) => {
+                    return Err((
+                        PomErrorCode::TargetFilesInvalidEntry,
+                        Some(src.to_string()),
+                    ));
+                }
+            };
+
+            let entry_path = entry.path();
+
+            if entry_path.is_file() {
+                continue;  // Look for a target-specific directory
+            }
+
+            let dir_name = match entry_path.file_name() {
+                Some(dir_name) => dir_name,
+                None => continue,  // Can't happen with default files
+            };
+
+            let dir_name = dir_name.to_string_lossy().to_string();
+
+            if dir_name == project_target_parameter {
+                return Ok(entry_path);
+            } else {
+                let entry_name = match source_str {
+                    default_source => format!("{} (default)", dir_name),
+                    _ => format!("{} (user)", dir_name),
+                };
+
+                available_targets.insert(
+                    entry_name,
+                    entry_path,
+                );
+            }
+        }
+    }
+
+    select_target(&available_targets)
 }
 
 

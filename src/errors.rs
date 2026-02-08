@@ -29,11 +29,18 @@ pub enum PomErrorCode {
     PomTomlFileSerializationFail = 50,
     // Target-free files errors: 6x
     TargetFreeFilesDefaultSourceMissing = 60,
-    TargetFreeFilesSourceReadFail = 61,
-    TargetFreeFilesInvalidEntry = 62,
+    TargetFreeFilesSourceReadFail = 61,     // A
+    TargetFreeFilesInvalidEntry = 62,       // B
     TargetFreeFilesAlreadyExists = 63,
     TargetFreeFilesCopyFail = 64,
-    TargetFreeFilesDefaultSourceEmpty = 65,
+    TargetFreeFilesDefaultSourceEmpty = 65, // C
+    // Target files errors: 7x
+    TargetSelectionFail = 70,
+    TargetFilesSourceReadFail = 71,         // A
+    TargetFilesInvalidEntry = 72,           // B
+    TargetFilesDefaultSourceEmpty = 75,     // C
+
+                                            // A, B, C -> Refactor directory access?
 }
 
 impl PomErrorCode {
@@ -71,6 +78,11 @@ impl PomErrorCode {
             PomErrorCode::TargetFreeFilesAlreadyExists => "Tried to create a file that already exists",
             PomErrorCode::TargetFreeFilesCopyFail => "Failed to copy a file.",
             PomErrorCode::TargetFreeFilesDefaultSourceEmpty => "The default source for target-free files is empty.",
+            // Target files errors: 7x
+            PomErrorCode::TargetSelectionFail => "An error occured when selecting the target.",
+            PomErrorCode::TargetFilesSourceReadFail => "Can't read content in target files source directory.",
+            PomErrorCode::TargetFilesInvalidEntry => "Found an invalid entry in target files source directory.",
+            PomErrorCode::TargetFilesDefaultSourceEmpty => "The default source for target files is empty.",
             // Non fatal errors fallback
             _ => "Internal: missing config source was handled as fatal. This is a Pom bug.",
 

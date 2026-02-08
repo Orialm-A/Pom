@@ -1,5 +1,10 @@
 use text_io::read;
 use unicode_normalization::UnicodeNormalization;
+use dialoguer::{Select, theme::ColorfulTheme};
+use crate::errors::{PomErrorCode, PomResult};
+use std::collections::HashMap;
+use std::path::{PathBuf, Path};
+
 
 pub fn prompt_if_missing_string(optional: Option<String>, prompt_hint: &str) -> String {
     match optional {
@@ -38,6 +43,30 @@ pub fn slugify_snake(input: &str) -> String {
     }
 
     normalized_string
+}
+
+pub fn select_target(available_targets: &HashMap<String, PathBuf>) -> PomResult<PathBuf> {
+    let mut keys: Vec<&String> = available_targets.keys().collect();
+
+    if keys.is_empty() {
+        return Err((PomErrorCode::TargetFilesDefaultSourceEmpty, None));
+    }
+
+    keys.sort();
+
+    let selection = Select::with_theme(&ColorfulTheme::default())
+        .with_prompt("Target not found. Select one of the available targets")
+        .items(&keys)
+        .default(0)
+        .interact()
+        .map_err(|e| (
+            PomErrorCode::TargetSelectionFail,
+            Some(e.to_string()),
+        ))?;
+
+
+    let selected_key = keys[selection];
+    Ok(available_targets[selected_key].clone())
 }
 
 #[cfg(test)]
