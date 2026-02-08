@@ -45,6 +45,8 @@ pub fn project_create(
     project_name_parameter: Option<String>,
     // The path where to create the project passed in the CLI
     project_root_parameter: Option<PathBuf>,
+    // What platform to compile the project for
+    project_target_parameter: Option<String>,
     // Print what would be done without creating / modifying files
     dry_run: bool
 ) {

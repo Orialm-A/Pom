@@ -20,8 +20,9 @@ fn main() {
             Proj::Create {
                 project_name,
                 path,
+                target,
                 dry_run
-            } => api::project_create_function(project_name, path, dry_run),
+            } => api::project_create_function(project_name, path, target, dry_run),
             Proj::Rename { new_project_name } => api::project_rename_function(new_project_name),
             Proj::Config => api::project_config_function(),
         },
