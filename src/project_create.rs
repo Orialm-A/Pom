@@ -10,7 +10,7 @@ use std::io::prelude::*;
 use std::collections::HashMap;
 use serde::Serialize;
 use walkdir::WalkDir;
-use crate::filesystem::create_directories;
+use crate::filesystem::{create_directories, validate_dir_entry, EntryKind};
 
 
 #[derive(Debug)]
@@ -210,7 +210,7 @@ fn get_project_target(project_target_parameter: Option<String>) -> PomResult<Pat
             Ok(entries) => entries,  // Shadowing
             Err(src) => {
                 return Err((
-                    PomErrorCode::TargetFilesSourceReadFail,
+                    PomErrorCode::TargetFilesSourceReadFail,  // HERE - ERROR 71
                     Some(src.to_string()),
                 ))
             }
@@ -337,7 +337,7 @@ fn resolve_project_layout(project_root: &Path, generation_layout: &[GenerationLa
 //             Ok(()) => { continue },
 //             Err(src) => {
 //                 return Err((
-//                     PomErrorCode::DirCreationFail,
+//                     PomErrorCode::FilesystemDirCreationFail,
 //                     Some(format!("{}: {}", subdir_path.display(), src))
 //                 ));
 //             }
@@ -489,7 +489,7 @@ fn copy_target_free_files(project_root: &Path) -> PomResult<()> {
                     if files_source == default_source {
                     // Should never get here!
                     // If no file has been copied from the default source, it means `assets/target_free` is empty: The repository has an issue, or the build output has an issue.
-                    return Err((PomErrorCode::TargetFreeFilesDefaultSourceEmpty, None));
+                    return Err((PomErrorCode::TargetFreeFilesDefaultSourceEmpty, None));  // HERE - ERROR 65
                     } else {
                         continue;  // High priority empty, fall back to lower
                     }
@@ -509,7 +509,7 @@ fn copy_target_free_files_core_logic(project_root: &Path, source_path: &Path) ->
         Ok(extracted_entries) => extracted_entries,
         Err(src) => {
             return Err((
-                PomErrorCode::TargetFreeFilesSourceReadFail,
+                PomErrorCode::TargetFreeFilesSourceReadFail,  // HERE - ERROR 61
                 Some(src.to_string()),
             ))
         }
@@ -520,7 +520,7 @@ fn copy_target_free_files_core_logic(project_root: &Path, source_path: &Path) ->
             Ok(entry) => entry,  // Double shadowing! :0
             Err(src) => {
                 return Err((
-                    PomErrorCode::TargetFreeFilesInvalidEntry,
+                    PomErrorCode::TargetFreeFilesInvalidEntry,  // HERE - ERROR 62
                     Some(src.to_string()),
                 ));
             }
@@ -572,50 +572,32 @@ fn copy_target_dependent_files(project_root: &Path, target_source_root: &Path) -
     let mut file_count: usize = 0;
 
     for entry in WalkDir::new(target_source_root).into_iter() {
-        let entry = match entry {
-            Ok(entry) => entry,
-            Err(src) => {
-                return Err((
-                    PomErrorCode::TargetFilesInvalidEntry,
-                    Some(src.to_string()),
-                ));
-            }
+
+        let validated_entry = match validate_dir_entry(entry, target_source_root) {
+            Ok(validated_entry) => validated_entry,
+            Err(e) => return Err(e),
         };
 
-        let entry_path = entry.path();
+        let entry_full_path = validated_entry.full_path;
+        let entry_relative_path = validated_entry.relative_path;
+        let entry_kind = validated_entry.kind;
+
+        let destination_path = project_root.join(&entry_relative_path);
 
         // Create all met directories, to preserve empty dirs the user may create
-        if entry.file_type().is_dir() {
-            let relative_path = match entry_path.strip_prefix(target_source_root) {
-                Ok(relative_path) => relative_path, // Shadowing
-                Err(_) => continue,
-            };
-            if relative_path.as_os_str().is_empty() {
+        if entry_kind == EntryKind::Directory {
+            if entry_relative_path.as_os_str().is_empty() {
                 continue; // root itself
             }
-            let destination_dir = project_root.join(relative_path);
 
-            match create_directories(&destination_dir) {
-                Ok(()) => {},
+            match create_directories(&destination_path) {
+                Ok(()) => { continue; },
                 Err(err) => return Err(err),
             }
+        } else if entry_kind == EntryKind::Symlink {
+            continue;
         }
 
-        if !entry.file_type().is_file() {
-            continue; // ignore symlinks
-        }
-
-        let relative_path = match entry_path.strip_prefix(target_source_root) {
-            Ok(relative_path) => relative_path,  // Shadowing
-            Err(src) => {
-                return Err((
-                    PomErrorCode::TargetFilesStripPrefixFail,
-                    Some(src.to_string()),
-                ));
-            }
-        };
-
-        let destination_path = project_root.join(relative_path);
 
         if destination_path.exists() {
             return Err((
@@ -624,12 +606,12 @@ fn copy_target_dependent_files(project_root: &Path, target_source_root: &Path) -
             ));
         }
 
-        match fs::copy(entry_path, &destination_path) {
+        match fs::copy(&entry_full_path, &destination_path) {
             Ok(_) => file_count += 1,
             Err(src) => {
                 return Err((
                     PomErrorCode::TargetFilesCopyFail,
-                    Some(format!("{}: {}", entry_path.display(), src)),
+                    Some(format!("{}: {}", entry_full_path.display(), src)),
                 ));
             }
         }
@@ -758,7 +740,7 @@ mod tests{
             ];
 
             let err = create_directories(&dirs).unwrap_err();
-            assert_eq!(err.0, PomErrorCode::DirCreationFail);
+            assert_eq!(err.0, PomErrorCode::FilesystemDirCreationFail);
         }
     }
 

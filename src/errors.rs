@@ -20,8 +20,11 @@ pub enum PomErrorCode {
     GenerationLayoutFileCantParse = 22,
     GenerationLayoutFileCouldNotFindAny = 23,
     GenerationLayoutFileInvalidEntryPath = 24,
-    // subdirectories errors: 3x
-    DirCreationFail = 30,               // refac done
+    // Filesystem errors: 3x
+    FilesystemDirCreationFail = 30,               // refac done
+    FilesystemEntryInvalid = 31,
+    FilesystemStripPathPrefixFail = 32,
+    FilesystemUnsupportedEntryType = 33,
     // File creation errors: 4x
     FileCreationFail = 40,
     FileWriteFail = 41,
@@ -31,7 +34,7 @@ pub enum PomErrorCode {
     TargetFreeFilesDefaultSourceMissing = 60,
     TargetFreeFilesSourceReadFail = 61,     // A
     TargetFreeFilesInvalidEntry = 62,       // B - Entries when exploring dir (recur. or not)
-    TargetFreeFilesAlreadyExists = 63,
+    TargetFreeFilesAlreadyExists = 63,      // D
     TargetFreeFilesCopyFail = 64,           // F
     TargetFreeFilesDefaultSourceEmpty = 65, // C
     // Target files errors: 7x
@@ -42,12 +45,11 @@ pub enum PomErrorCode {
 
     TargetFilesSourceMissing = 76,
     TargetFilesSourceNotDir = 77,
-    TargetFilesStripPrefixFail = 78,
-    TargetFilesAlreadyExists = 79,
+    TargetFilesAlreadyExists = 73,          // D
     TargetFilesCopyFail = 80,               // F
 
-                                            // A, B, C  -> Refactor directory access
-                                            // F        -> Refactor file copy
+                                            // A, B, C  -> Refactor directory access/walking
+                                            // D, F     -> Refactor file copy
 }
 
 impl PomErrorCode {
@@ -72,7 +74,7 @@ impl PomErrorCode {
             PomErrorCode::GenerationLayoutFileCouldNotFindAny => "Did not found any dir tree config file.",
             PomErrorCode::GenerationLayoutFileInvalidEntryPath => "The field `path` of a generation layout entry is invalid, failed to extract its name.",
             // subdirectories errors: 3x
-            PomErrorCode::DirCreationFail => "Failed to create a subdir for the project.",
+            PomErrorCode::FilesystemDirCreationFail => "Failed to create a subdir for the project.",
             // File creation errors: 4x
             PomErrorCode::FileCreationFail => "Failed to create a file.",
             PomErrorCode::FileWriteFail => "Successfully created a file but failed to fill it.",
@@ -92,7 +94,7 @@ impl PomErrorCode {
             PomErrorCode::TargetFilesDefaultSourceEmpty => "The default source for target files is empty.",
             PomErrorCode::TargetFilesSourceMissing => "The path to target-specific files source does not exist.",
             PomErrorCode::TargetFilesSourceNotDir => "The path to target-specific files source is not a dir",
-            PomErrorCode::TargetFilesStripPrefixFail => "Failed to strip the prefix from the path to target-specific files source.",
+            // PomErrorCode::TargetFilesStripPrefixFail => "Failed to strip the prefix from the path to target-specific files source.",
             PomErrorCode::TargetFilesAlreadyExists => "Tried to generate a target-specific file but it already exists.",
             PomErrorCode::TargetFilesCopyFail => "Failed to copy a target-specific file.",
             // Non fatal errors fallback

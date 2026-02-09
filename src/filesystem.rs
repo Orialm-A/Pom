@@ -1,82 +1,150 @@
 use std::path::{PathBuf, Path};
 use crate::errors::{PomErrorCode, PomResult};
 use std::fs;
+use walkdir::WalkDir;
 
 
-// Learning notes: We define a trait = a list of methods a type must provide
-// to be considered a `PathList`.
-pub trait PathList {
-    // Any type implementing `PathList` must provide this method.
-    fn iter_paths(&self) -> Box<dyn Iterator<Item = &Path> + '_>;
-    // Any type implementing `PathList` must provide this method.
-    //
-    // Return type dissection:
-    // - `Iterator` is a *trait* (not a concrete type). It has an associated type `Item`.
-    // - `Iterator<Item = &Path>` means: "an iterator whose yielded items are `&Path`".
-    // - `dyn Iterator<...>` means: "a *trait object*": the concrete iterator type is
-    //   intentionally hidden/unknown to the caller; calls go through dynamic dispatch
-    //   (vtable). This lets us return different concrete iterator types from the same
-    //   function (e.g. `once(...)` vs `slice.iter().map(...)`).
-    // - `Box<dyn ...>`: a `dyn Trait` value has unknown size at compile time, so it must
-    //   live behind a pointer. `Box` is an owning heap pointer, suitable for returning
-    //   an iterator created inside this method.
-    // - `+ '_`: this ties the trait object's lifetime to `&self`. The iterator may borrow
-    //   from `self` (it yields `&Path` that come from paths stored in `self`), therefore
-    //   the iterator cannot outlive `self`. Equivalent explicit form:
-    //       `fn iter_paths<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Path> + 'a>`
-    //
-    // TL;DR: "Return an owned (Boxed) trait object iterator over borrowed `&Path` items,
-    //         and ensure it can't outlive `self`."
-}
+pub mod path_list {
 
+    use std::path::{PathBuf, Path};
 
-impl PathList for Path {
-    fn iter_paths(&self) -> Box<dyn Iterator<Item = &Path> + '_> {
-        Box::new(std::iter::once(self))
+    // Learning notes: We define a trait = a list of methods a type must provide
+    // to be considered a `PathList`.
+    pub trait PathList {
+        // Any type implementing `PathList` must provide this method.
+        fn iter_paths(&self) -> Box<dyn Iterator<Item = &Path> + '_>;
+        // Any type implementing `PathList` must provide this method.
+        //
+        // Return type dissection:
+        // - `Iterator` is a *trait* (not a concrete type). It has an associated type `Item`.
+        // - `Iterator<Item = &Path>` means: "an iterator whose yielded items are `&Path`".
+        // - `dyn Iterator<...>` means: "a *trait object*": the concrete iterator type is
+        //   intentionally hidden/unknown to the caller; calls go through dynamic dispatch
+        //   (vtable). This lets us return different concrete iterator types from the same
+        //   function (e.g. `once(...)` vs `slice.iter().map(...)`).
+        // - `Box<dyn ...>`: a `dyn Trait` value has unknown size at compile time, so it must
+        //   live behind a pointer. `Box` is an owning heap pointer, suitable for returning
+        //   an iterator created inside this method.
+        // - `+ '_`: this ties the trait object's lifetime to `&self`. The iterator may borrow
+        //   from `self` (it yields `&Path` that come from paths stored in `self`), therefore
+        //   the iterator cannot outlive `self`. Equivalent explicit form:
+        //       `fn iter_paths<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Path> + 'a>`
+        //
+        // TL;DR: "Return an owned (Boxed) trait object iterator over borrowed `&Path` items,
+        //         and ensure it can't outlive `self`."
     }
-}
 
 
-impl PathList for PathBuf {
-    fn iter_paths(&self) -> Box<dyn Iterator<Item = &Path> + '_> {
-        Box::new(  // Placed on the heap so it can be returned by reference
-            std::iter::once(  // An iterator that yields exactly one element
-                self.as_path() // A borrowed view of `self`
+    impl PathList for Path {
+        fn iter_paths(&self) -> Box<dyn Iterator<Item = &Path> + '_> {
+            Box::new(std::iter::once(self))
+        }
+    }
+
+
+    impl PathList for PathBuf {
+        fn iter_paths(&self) -> Box<dyn Iterator<Item = &Path> + '_> {
+            Box::new(  // Placed on the heap so it can be returned by reference
+                std::iter::once(  // An iterator that yields exactly one element
+                    self.as_path() // A borrowed view of `self`
+                )
             )
-        )
+        }
     }
+
+
+    impl PathList for [PathBuf] {
+        fn iter_paths(&self) -> Box<dyn Iterator<Item = &Path> + '_> {
+            Box::new(
+                self.iter()  // `self` is `[PathBuf]`, we take an iterator over references to its elements
+                .map(|p| p.as_path()))  // Transforms ("maps") each item (`|p|`) of this iterator into something else. Here: `&Path`s
+        }
+    }
+
+
+    impl PathList for Vec<PathBuf> {
+        fn iter_paths(&self) -> Box<dyn Iterator<Item = &Path> + '_> {
+            self.as_slice().iter_paths()
+        }
+    }
+
 }
 
 
-impl PathList for [PathBuf] {
-    fn iter_paths(&self) -> Box<dyn Iterator<Item = &Path> + '_> {
-        Box::new(
-            self.iter()  // `self` is `[PathBuf]`, we take an iterator over references to its elements
-            .map(|p| p.as_path()))  // Transforms ("maps") each item (`|p|`) of this iterator into something else. Here: `&Path`s
-    }
+#[derive(Debug, PartialEq)]
+pub enum EntryKind {
+    File,
+    Directory,
+    Symlink,
 }
 
 
-impl PathList for Vec<PathBuf> {
-    fn iter_paths(&self) -> Box<dyn Iterator<Item = &Path> + '_> {
-        self.as_slice().iter_paths()
-    }
+pub struct ValidatedEntry {
+    pub full_path: PathBuf,
+    pub relative_path: PathBuf,
+    pub kind: EntryKind,
 }
+
 
 
 // Read parameter type as "A reference to a type implementing `PathList`"
-pub fn create_directories(dirs_paths: &(impl PathList + ?Sized)) -> PomResult<()> {
+pub fn create_directories(dirs_paths: &(impl path_list::PathList + ?Sized)) -> PomResult<()> {
     for dir_path in dirs_paths.iter_paths() {
         match fs::create_dir_all(dir_path) {
             Ok(()) => { continue },
             Err(src) => {
                 let details = format!("{}: {:?}",dir_path.display(), src);
                 return Err((
-                    PomErrorCode::DirCreationFail,
+                    PomErrorCode::FilesystemDirCreationFail,
                     Some(details),
                 ));
             }
         };
     }
     Ok(())
+}
+
+
+pub fn validate_dir_entry(entry: Result<walkdir::DirEntry, walkdir::Error>, source_root: &Path) -> PomResult<ValidatedEntry> {
+    let entry = match entry {
+        Ok(entry) => entry,
+        Err(src) => {
+            return Err((
+                PomErrorCode::FilesystemEntryInvalid,
+                Some(src.to_string()),
+            ));
+        },
+    };
+
+    let full_path = entry.path();
+
+    let relative_path = match full_path.strip_prefix(source_root) {
+        Ok(relative_path) => relative_path,
+        Err(src) => {
+            return Err((
+                PomErrorCode::FilesystemStripPathPrefixFail,
+                Some(src.to_string()),
+            ));
+        }
+    };
+
+    let file_type = entry.file_type();
+    let kind = if file_type.is_file() {
+        EntryKind::File
+    } else if file_type.is_dir() {
+        EntryKind::Directory
+    } else if file_type.is_symlink() {
+        EntryKind::Symlink
+    } else {
+        return Err((
+            PomErrorCode::FilesystemUnsupportedEntryType,
+            Some(full_path.display().to_string()),
+        ));
+    };
+
+    Ok(ValidatedEntry {
+        full_path: full_path.to_path_buf(),
+        relative_path: relative_path.to_path_buf(),
+        kind: kind,
+    })
 }
