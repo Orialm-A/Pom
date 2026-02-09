@@ -44,7 +44,7 @@ pub enum PomErrorCode {
     TargetFilesDefaultSourceEmpty = 75,     // C
 
 
-                                            // A, B, C  -> Refactor directory access/walking
+                                            // A, B, C  -> Helper exists. Need arg refac
 }
 
 impl PomErrorCode {
