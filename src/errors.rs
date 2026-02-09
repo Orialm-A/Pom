@@ -36,10 +36,6 @@ pub enum PomErrorCode {
     PomTomlFileSerializationFail = 50,
     // Target-free files errors: 6x
     TargetFreeFilesDefaultSourceMissing = 60,
-    TargetFreeFilesSourceReadFail = 61,     // A
-    TargetFreeFilesInvalidEntry = 62,       // B - Entries when exploring dir (recur. or not)
-    TargetFreeFilesAlreadyExists = 63,      // Replaced by 36
-    TargetFreeFilesCopyFail = 64,           // Replaced by 37
     TargetFreeFilesDefaultSourceEmpty = 65, // C
     // Target files errors: 7x
     TargetSelectionFail = 70,
@@ -49,7 +45,6 @@ pub enum PomErrorCode {
 
 
                                             // A, B, C  -> Refactor directory access/walking
-                                            // D, F     -> Refactor file copy
 }
 
 impl PomErrorCode {
@@ -82,10 +77,6 @@ impl PomErrorCode {
             PomErrorCode::PomTomlFileSerializationFail => "Failed to serialize project settings for `pom.toml`",
             // Target-free files errors: 6x
             PomErrorCode::TargetFreeFilesDefaultSourceMissing => "The default source for target-free files is missing.",
-            PomErrorCode::TargetFreeFilesSourceReadFail => "Can't read content in target-free files source directory.",
-            PomErrorCode::TargetFreeFilesInvalidEntry => "Found an invalid entry in target-free files source directory.",
-            PomErrorCode::TargetFreeFilesAlreadyExists => "Tried to create a file that already exists",
-            PomErrorCode::TargetFreeFilesCopyFail => "Failed to copy a file.",
             PomErrorCode::TargetFreeFilesDefaultSourceEmpty => "The default source for target-free files is empty.",
             // Target files errors: 7x
             PomErrorCode::TargetSelectionFail => "An error occured when selecting the target.",

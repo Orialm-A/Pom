@@ -3,7 +3,7 @@ use unicode_normalization::UnicodeNormalization;
 use dialoguer::{Select, theme::ColorfulTheme};
 use crate::errors::{PomErrorCode, PomResult};
 use std::collections::HashMap;
-use std::path::{PathBuf, Path};
+use std::path::{PathBuf,};
 
 
 pub fn prompt_if_missing_string(optional: Option<String>, prompt_hint: &str) -> String {

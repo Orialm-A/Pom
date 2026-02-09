@@ -9,8 +9,7 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::collections::HashMap;
 use serde::Serialize;
-use walkdir::WalkDir;
-use crate::filesystem::{create_directories, validate_dir_entry, EntryKind, copy_files};
+use crate::filesystem::{create_directories, validate_dir_entry, copy_files};
 
 
 #[derive(Debug)]
@@ -331,22 +330,6 @@ fn resolve_project_layout(project_root: &Path, generation_layout: &[GenerationLa
 }
 
 
-// fn create_directories(dirs_path_list: &[PathBuf]) -> PomResult<()> {
-//     for subdir_path in dirs_path_list {
-//         match fs::create_dir_all(subdir_path) {
-//             Ok(()) => { continue },
-//             Err(src) => {
-//                 return Err((
-//                     PomErrorCode::FilesystemDirCreationFail,
-//                     Some(format!("{}: {}", subdir_path.display(), src))
-//                 ));
-//             }
-//         };
-//     }
-//     Ok(())
-// }
-
-
 fn get_dir_name(path: &Path) -> PomResult<&str> {
     let dir_name_opt = path
         .components()
@@ -483,7 +466,7 @@ fn copy_target_free_files(project_root: &Path) -> PomResult<()> {
             }
         }
 
-        match copy_target_free_files_core_logic(project_root, source_path) {
+        match copy_files(source_path, project_root) {
             Ok(file_count) => {
                 if file_count == 0 {
                     if files_source == default_source {
@@ -501,63 +484,6 @@ fn copy_target_free_files(project_root: &Path) -> PomResult<()> {
     }
 
     Ok(())
-}
-
-fn copy_target_free_files_core_logic(project_root: &Path, source_path: &Path) -> PomResult<usize> {
-    let mut file_count: usize = 0;
-    let entries =  match fs::read_dir(source_path) {
-        Ok(extracted_entries) => extracted_entries,
-        Err(src) => {
-            return Err((
-                PomErrorCode::TargetFreeFilesSourceReadFail,  // HERE - ERROR 61
-                Some(src.to_string()),
-            ))
-        }
-    };
-
-    for entry in entries {
-        let entry = match entry {  // Shadowing
-            Ok(entry) => entry,  // Double shadowing! :0
-            Err(src) => {
-                return Err((
-                    PomErrorCode::TargetFreeFilesInvalidEntry,  // HERE - ERROR 62
-                    Some(src.to_string()),
-                ));
-            }
-        };
-
-        let entry_path = entry.path();
-
-        if !entry_path.is_file() {
-            continue;  // Only copy files, ignore subdirs
-        }
-
-        let file_name = match entry_path.file_name() {
-            Some(file_name) => file_name,
-            None => continue,  // Can't happen with default files
-        };
-
-        let destination_path = project_root.join(file_name);
-
-        if destination_path.exists() {
-            return Err((
-                PomErrorCode::TargetFreeFilesAlreadyExists,
-                Some(format!("`{}` already exists.", destination_path.display())),
-            ));
-        }
-
-        match fs::copy(&entry_path, &destination_path) {
-            Ok(_) => { file_count += 1; }
-            Err(src) => {
-                return Err((
-                    PomErrorCode::TargetFreeFilesCopyFail,
-                    Some(format!("{}: {}", entry_path.display(), src))
-                ));
-            }
-        }
-    }
-
-    Ok(file_count)
 }
 
 
