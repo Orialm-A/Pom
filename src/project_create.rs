@@ -10,7 +10,7 @@ use std::io::prelude::*;
 use std::collections::HashMap;
 use serde::Serialize;
 use walkdir::WalkDir;
-use crate::filesystem::{create_directories, validate_dir_entry, EntryKind};
+use crate::filesystem::{create_directories, validate_dir_entry, EntryKind, copy_files};
 
 
 #[derive(Debug)]
@@ -126,7 +126,7 @@ pub fn project_create(
 
     println!("Generate target-specific files...");
     if !dry_run {
-        match copy_target_dependent_files(&project_root, &project_target) {
+        match copy_files(&project_target, &project_root) {
             Ok(_) => {},
             Err((error_code, src)) => {error_code.handler(src.as_deref()); }
         }
@@ -559,67 +559,6 @@ fn copy_target_free_files_core_logic(project_root: &Path, source_path: &Path) ->
 
     Ok(file_count)
 }
-
-
-fn copy_target_dependent_files(project_root: &Path, target_source_root: &Path) -> PomResult<usize> {
-    if !target_source_root.exists() {
-        return Err((PomErrorCode::TargetFilesSourceMissing, Some(target_source_root.display().to_string())));
-    }
-    if !target_source_root.is_dir() {
-        return Err((PomErrorCode::TargetFilesSourceNotDir, Some(target_source_root.display().to_string())));
-    }
-
-    let mut file_count: usize = 0;
-
-    for entry in WalkDir::new(target_source_root).into_iter() {
-
-        let validated_entry = match validate_dir_entry(entry, target_source_root) {
-            Ok(validated_entry) => validated_entry,
-            Err(e) => return Err(e),
-        };
-
-        let entry_full_path = validated_entry.full_path;
-        let entry_relative_path = validated_entry.relative_path;
-        let entry_kind = validated_entry.kind;
-
-        let destination_path = project_root.join(&entry_relative_path);
-
-        // Create all met directories, to preserve empty dirs the user may create
-        if entry_kind == EntryKind::Directory {
-            if entry_relative_path.as_os_str().is_empty() {
-                continue; // root itself
-            }
-
-            match create_directories(&destination_path) {
-                Ok(()) => { continue; },
-                Err(err) => return Err(err),
-            }
-        } else if entry_kind == EntryKind::Symlink {
-            continue;
-        }
-
-
-        if destination_path.exists() {
-            return Err((
-                PomErrorCode::TargetFilesAlreadyExists,
-                Some(format!("`{}` already exists.", destination_path.display())),
-            ));
-        }
-
-        match fs::copy(&entry_full_path, &destination_path) {
-            Ok(_) => file_count += 1,
-            Err(src) => {
-                return Err((
-                    PomErrorCode::TargetFilesCopyFail,
-                    Some(format!("{}: {}", entry_full_path.display(), src)),
-                ));
-            }
-        }
-    }
-
-    Ok(file_count)
-}
-
 
 
 #[cfg(test)]

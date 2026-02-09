@@ -86,7 +86,6 @@ pub struct ValidatedEntry {
 }
 
 
-
 // Read parameter type as "A reference to a type implementing `PathList`"
 pub fn create_directories(dirs_paths: &(impl path_list::PathList + ?Sized)) -> PomResult<()> {
     for dir_path in dirs_paths.iter_paths() {
@@ -147,4 +146,66 @@ pub fn validate_dir_entry(entry: Result<walkdir::DirEntry, walkdir::Error>, sour
         relative_path: relative_path.to_path_buf(),
         kind: kind,
     })
+}
+
+
+pub fn copy_files(source_root: &Path, destination_root: &Path) -> PomResult<usize> {
+    if !source_root.exists() {
+        return Err((
+            PomErrorCode::FilesystemCopySourceMissing,
+            Some(source_root.display().to_string())
+        ));
+    }
+    if !source_root.is_dir() {
+        return Err((
+            PomErrorCode::FilesystemCopySourceNotDir,
+            Some(source_root.display().to_string())
+        ));
+    }
+
+    let mut copy_count: usize = 0;
+
+    for entry in WalkDir::new(source_root).into_iter() {
+        let validated_entry = validate_dir_entry(entry, source_root)?;
+
+        let entry_full_path = validated_entry.full_path;
+        let entry_relative_path = validated_entry.relative_path;
+        let entry_kind = validated_entry.kind;
+
+        let destination_path = destination_root.join(&entry_relative_path);
+
+        match entry_kind {
+            EntryKind::Directory => {
+                if entry_relative_path.as_os_str().is_empty() {
+                    continue; // root itself
+                }
+                create_directories(&destination_path)?;
+            },
+            EntryKind::Symlink => {
+                println!("WARNING: `{}` is a symlink. It is not supported by pom current version.", entry_relative_path.display());
+                continue;
+                // Doesn't justify an error
+            },
+            EntryKind::File => {
+                if destination_path.exists() {
+                    return Err((
+                        PomErrorCode::FilesystemCopyDestExists,
+                        Some(format!("`{}` already exists.", destination_path.display())),
+                    ));
+                }
+
+                match fs::copy(&entry_full_path, &destination_path) {
+                    Ok(_) => copy_count += 1,
+                    Err(src) => {
+                        return Err((
+                            PomErrorCode::FilesystemCopyFail,
+                            Some(format!("{}: {}", entry_full_path.display(), src)),
+                        ));
+                    }
+                }
+            },
+        };
+    }
+
+    Ok(copy_count)
 }
