@@ -1,3 +1,7 @@
+//! Prompt module
+//!
+//! Prompt user for missing information
+
 use unicode_normalization::UnicodeNormalization;
 use dialoguer::{Select, Input, theme::ColorfulTheme};
 use crate::errors::{PomErrorCode, PomResult};
@@ -6,6 +10,9 @@ use std::path::{PathBuf,};
 
 
 
+/// Prompt the user for a string if the passed one is `None`
+///
+/// May error `PomErrorCode::PromptStringFail`
 pub fn prompt_if_missing_string(optional_string: Option<String>, prompt_hint: &str) -> PomResult<String> {
     match optional_string {
         Some(optional_string) => Ok(optional_string),
@@ -20,6 +27,11 @@ pub fn prompt_if_missing_string(optional_string: Option<String>, prompt_hint: &s
 }
 
 
+/// Convert a string into a snake_case, alpha-numeric only slug
+///
+/// Replaces accentuated letters with non-accentuated equivalent
+/// Replace punctuations with `_`
+/// Removes other characters (emoji, sharp...)
 pub fn slugify_snake(input: &str) -> String {
     let mut normalized_string = String::new();
     let mut last_was_underscore = false;
@@ -32,13 +44,13 @@ pub fn slugify_snake(input: &str) -> String {
         if character.is_ascii_alphanumeric() {
             normalized_string.push(character.to_ascii_lowercase());
             last_was_underscore = false;
-        } else if matches!(character, ' ' | '-' | '_' | '.' | ':' | '/') {
+        } else if matches!(character, ' ' | '-' | '_' | '.' | ',' | ';' | ':' | '/') {
             if !normalized_string.is_empty() && !last_was_underscore {
                 normalized_string.push('_');
                 last_was_underscore = true
             }
         } else {
-            // Ignore any other character like colon or emoji
+            // Ignore any other character like emoji
         }
     }
 
@@ -49,6 +61,8 @@ pub fn slugify_snake(input: &str) -> String {
     normalized_string
 }
 
+
+/// Select a target from a menu
 pub fn select_target(available_targets: &HashMap<String, PathBuf>) -> PomResult<PathBuf> {
     let mut keys: Vec<&String> = available_targets.keys().collect();
 
