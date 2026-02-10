@@ -43,12 +43,14 @@ pub fn project_create(
     project_target_parameter: Option<String>,
     // Print what would be done without creating / modifying files
     dry_run: bool
-) {
+) -> PomResult<()> {
 
-    let generation_layout = match read_generation_layout() {
-        Ok(extracted_generation_layout) => {extracted_generation_layout},
-        Err((error_code, src)) => { error_code.handler(src.as_deref()); }
-    };
+    let generation_layout = read_generation_layout()?;
+
+    // let generation_layout = match read_generation_layout() {
+    //     Ok(extracted_generation_layout) => {extracted_generation_layout},
+    //     Err((error_code, src)) => { error_code.handler(src.as_deref()); }
+    // };
 
     let project_root = match resolve_project_root(project_root_parameter) {
         Ok(extracted_project_root) => { extracted_project_root },
@@ -123,6 +125,8 @@ pub fn project_create(
             Err((error_code, src)) => {error_code.handler(src.as_deref()); }
         }
     }
+
+    Ok(())
 }
 
 
