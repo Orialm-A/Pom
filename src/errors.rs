@@ -34,15 +34,11 @@ pub enum PomErrorCode {
     FileWriteFail = 41,
     // `pom.toml` file errors: 5x
     PomTomlFileSerializationFail = 50,
-    // Target-free files errors: 6x
-    TargetFreeFilesDefaultSourceMissing = 60,
-    TargetFreeFilesDefaultSourceEmpty = 65, // C
-    // Target files errors: 7x
-    TargetSelectionFail = 70,
-    TargetFilesDefaultSourceEmpty = 75,     // C
+    // Target files errors: 6x
+    TargetSelectionFail = 60,
+    // Assets errors: 7x
+    AssetsMissing = 70,  // Did not find expected files in default assets
 
-
-                                            // A, B, C  -> Helper exists. Need arg refac
 }
 
 impl PomErrorCode {
@@ -73,12 +69,8 @@ impl PomErrorCode {
             PomErrorCode::FileWriteFail => "Successfully created a file but failed to fill it.",
             // `pom.toml` file errors: 5x
             PomErrorCode::PomTomlFileSerializationFail => "Failed to serialize project settings for `pom.toml`",
-            // Target-free files errors: 6x
-            PomErrorCode::TargetFreeFilesDefaultSourceMissing => "The default source for target-free files is missing.",
-            PomErrorCode::TargetFreeFilesDefaultSourceEmpty => "The default source for target-free files is empty.",
             // Target files errors: 7x
             PomErrorCode::TargetSelectionFail => "An error occured when selecting the target.",
-            PomErrorCode::TargetFilesDefaultSourceEmpty => "The default source for target files is empty.",
             // Non fatal errors fallback
             _ => "Internal: missing config source was handled as fatal. This is a Pom bug.",
 

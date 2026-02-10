@@ -380,7 +380,8 @@ fn copy_target_free_files(project_root: &Path) -> PomResult<()> {
 
         if !source_path.exists() {
             if files_source == default_source {
-                return Err((PomErrorCode::TargetFreeFilesDefaultSourceMissing, None));
+                return Err((PomErrorCode::AssetsMissing, None));
+                // TODO: Must return the path to know what asset is missing
             }
         }
 
@@ -390,7 +391,7 @@ fn copy_target_free_files(project_root: &Path) -> PomResult<()> {
                     if files_source == default_source {
                     // Should never get here!
                     // If no file has been copied from the default source, it means `assets/target_free` is empty: The repository has an issue, or the build output has an issue.
-                    return Err((PomErrorCode::TargetFreeFilesDefaultSourceEmpty, None));  // HERE - ERROR 65
+                    return Err((PomErrorCode::AssetsMissing, None));
                     } else {
                         continue;  // High priority empty, fall back to lower
                     }

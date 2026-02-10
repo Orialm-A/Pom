@@ -49,7 +49,7 @@ pub fn select_target(available_targets: &HashMap<String, PathBuf>) -> PomResult<
     let mut keys: Vec<&String> = available_targets.keys().collect();
 
     if keys.is_empty() {
-        return Err((PomErrorCode::TargetFilesDefaultSourceEmpty, None));
+        return Err((PomErrorCode::AssetsMissing, None));
     }
 
     keys.sort();
