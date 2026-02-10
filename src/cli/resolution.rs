@@ -1,7 +1,8 @@
 use crate::prompt::{prompt_if_missing_string, slugify_snake, select_target};
-use crate::errors::{PomResult};
+use crate::errors::{PomResult, PomErrorCode};
 use crate::filesystem::{EntryKind, validate_dir_entry};
 
+use std::env;
 use std::path::{PathBuf, Path};
 use std::collections::HashMap;
 use walkdir::{WalkDir};
@@ -69,4 +70,58 @@ pub fn resolve_project_target(project_target_parameter: Option<String>) -> PomRe
     }
 
     return select_target(&available_targets);
+}
+
+
+pub fn resolve_project_root(project_root_parameter: Option<PathBuf>) -> PomResult<PathBuf> {
+
+    // Path in environment variable is tested first to return early (dev highest priority)
+    match env::var("POM_DEV_TEST_PROJECT") {
+        Ok(project_root) => {
+            let project_root = PathBuf::from(project_root);
+            validate_project_root(&project_root)?;
+            return Ok(project_root);
+        },
+        Err(env::VarError::NotPresent) => {},
+        Err(env::VarError::NotUnicode(src)) => {
+            return Err((
+                PomErrorCode::PathToProjectRootEnvVarNotUnicode,
+                Some(format!("{}", src.to_string_lossy().to_string())),
+            ));
+        },
+    };
+
+    // Parameter is tested before local directory to return early ensure user input priority
+    if let Some(project_root) = project_root_parameter {
+        validate_project_root(&project_root)?;
+        return Ok(project_root);
+    }
+
+    // Current directory fallback
+    match env::current_dir() {
+        Ok(project_root) => {
+            let project_root = PathBuf::from(project_root);
+            validate_project_root(&project_root)?;
+            return Ok(project_root);
+        },
+        Err(src) => {
+            Err((PomErrorCode::PathToProjectRootCantGetCurrentDir, Some(src.to_string())))
+        },
+    }
+}
+
+
+fn validate_project_root(project_root: &Path) -> PomResult<()> {
+    let stringified_project_root = project_root.as_os_str().to_string_lossy();
+
+    if stringified_project_root.trim().is_empty() {
+        return Err((PomErrorCode::PathToProjectRootEmpty, None));
+    }
+
+    let marker = project_root.join("pom_source_safeguard.txt");
+    if marker.is_file() {
+        return Err((PomErrorCode::PathToProjectRootInPomSource, None));
+    }
+
+    Ok(())
 }

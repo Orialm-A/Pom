@@ -1,4 +1,3 @@
-use std::env;
 use std::path::{PathBuf, Path};
 use crate::errors::{PomErrorCode, PomResult};
 use crate::read_config_files::{read_generation_layout, GenerationLayoutEntry};
@@ -6,7 +5,7 @@ use convert_case::{Case, Casing};
 use std::collections::HashMap;
 use serde::Serialize;
 use crate::filesystem::{create_directories, copy_files, write_file};
-use crate::cli::resolution::{resolve_project_name, resolve_project_target};
+use crate::cli::resolution::{resolve_project_name, resolve_project_target, resolve_project_root};
 
 
 #[derive(Debug)]
@@ -51,13 +50,8 @@ pub fn project_create(
         Err((error_code, src)) => { error_code.handler(src.as_deref()); }
     };
 
-    let project_root = match get_project_root(project_root_parameter) {
+    let project_root = match resolve_project_root(project_root_parameter) {
         Ok(extracted_project_root) => { extracted_project_root },
-        Err((error_code, src)) => { error_code.handler(src.as_deref()); }
-    };
-
-    match validate_project_root(&project_root) {
-        Ok(()) => {},
         Err((error_code, src)) => { error_code.handler(src.as_deref()); }
     };
 
@@ -129,52 +123,6 @@ pub fn project_create(
             Err((error_code, src)) => {error_code.handler(src.as_deref()); }
         }
     }
-}
-
-
-fn get_project_root(project_root_parameter: Option<PathBuf>) -> PomResult<PathBuf> {
-    // Path in environment variable is tested first to return early (dev highest priority)
-    match env::var("POM_DEV_TEST_PROJECT") {
-        Ok(project_root) => return Ok(PathBuf::from(project_root)),
-        Err(env::VarError::NotPresent) => {},
-        Err(env::VarError::NotUnicode(src)) => {
-            let details = format!("{:?}", src);  // `OsString`. Doesn't implement `Display`
-            return Err((
-                PomErrorCode::PathToProjectRootEnvVarNotUnicode,
-                Some(details),
-            ));
-        },
-    };
-
-    // Parameter is tested before local directory to return early ensure user input priority
-    match project_root_parameter {
-        Some(project_root) => return Ok(project_root),
-        None => {},
-    };
-
-    // Current directory fallback
-    match env::current_dir() {
-        Ok(project_root) => Ok(project_root),
-        Err(src) => {
-            Err((PomErrorCode::PathToProjectRootCantGetCurrentDir, Some(src.to_string())))
-        },
-    }
-}
-
-
-fn validate_project_root(project_root: &Path) -> PomResult<()> {
-    let stringified_project_root = project_root.as_os_str().to_string_lossy();
-
-    if stringified_project_root.trim().is_empty() {
-        return Err((PomErrorCode::PathToProjectRootEmpty, None));
-    }
-
-    let marker = project_root.join("pom_source_safeguard.txt");
-    if marker.is_file() {
-        return Err((PomErrorCode::PathToProjectRootInPomSource, None));
-    }
-
-    Ok(())
 }
 
 
