@@ -1,3 +1,8 @@
+//! Filesystem module
+//!
+//! This module is responsible for wraping interaction with the system OS Filesystem
+//! API (`std::fs`). It handles verification and error interpretation for file copy, creation, for directory walking...
+
 use std::path::{PathBuf, Path};
 use crate::errors::{PomErrorCode, PomResult};
 use std::fs;
@@ -5,13 +10,20 @@ use walkdir::WalkDir;
 
 
 pub mod path_list {
+    //! path_list module
+    //!
+    //! This module defines the trait `PathList`, to handle some functions to accept a
+    //! sole Path / PathBuf or a collection.
 
     use std::path::{PathBuf, Path};
 
-    // Learning notes: We define a trait = a list of methods a type must provide
-    // to be considered a `PathList`.
+
     pub trait PathList {
+        // Learning notes: We define a trait = a list of methods a type must provide
+        // to be considered a `PathList`.
         // Any type implementing `PathList` must provide this method.
+
+        /// Return an iterator of references on the provided element or on the provided collection elements
         fn iter_paths(&self) -> Box<dyn Iterator<Item = &Path> + '_>;
         // Any type implementing `PathList` must provide this method.
         //
@@ -72,6 +84,7 @@ pub mod path_list {
 
 
 #[derive(Debug, PartialEq)]
+/// Reperesents the type of a `WalkDir::EntryDir`
 pub enum EntryKind {
     File,
     Directory,
@@ -79,6 +92,7 @@ pub enum EntryKind {
 }
 
 
+/// Represents the data extracted from a `WalkDir::EntryDir` after validation
 pub struct ValidatedEntry {
     pub full_path: PathBuf,
     pub relative_path: PathBuf,
@@ -86,8 +100,13 @@ pub struct ValidatedEntry {
 }
 
 
-// Read parameter type as "A reference to a type implementing `PathList`"
+/// Create directories passed by reference
+///
+/// Existing directories are ignored
+/// Parents are created as needed
+/// May return `PomErrorCode::FilesystemDirCreationFail`
 pub fn create_directories(dirs_paths: &(impl path_list::PathList + ?Sized)) -> PomResult<()> {
+    // Read parameter type as "A reference to a type implementing `PathList`"
     for dir_path in dirs_paths.iter_paths() {
         match fs::create_dir_all(dir_path) {
             Ok(()) => { continue },
@@ -104,6 +123,9 @@ pub fn create_directories(dirs_paths: &(impl path_list::PathList + ?Sized)) -> P
 }
 
 
+/// Check if an entry gave by `WalkDir::new().into_iter()` is valid
+///
+/// May return `PomErrorCode::FilesystemStripPathPrefixFail`
 pub fn validate_dir_entry(entry: Result<walkdir::DirEntry, walkdir::Error>, source_root: &Path) -> PomResult<ValidatedEntry> {
     let entry = match entry {
         Ok(entry) => entry,
@@ -149,6 +171,10 @@ pub fn validate_dir_entry(entry: Result<walkdir::DirEntry, walkdir::Error>, sour
 }
 
 
+/// Copy files contained in a directory from a source to a destination
+///
+/// Create required sub directories to respect the source file tree
+/// May return `PomErrorCode::FilesystemCopyDestExists` or `FilesystemCopyDestExists`
 pub fn copy_files(source_root: &Path, destination_root: &Path) -> PomResult<usize> {
     if !source_root.exists() {
         return Err((
