@@ -1,15 +1,13 @@
 use std::env;
 use std::path::{PathBuf, Path};
 use crate::errors::{PomErrorCode, PomResult};
-use crate::prompt::{select_target};
-use std::fs;
 use crate::read_config_files::{read_generation_layout, GenerationLayoutEntry};
 use convert_case::{Case, Casing};
 use std::fs::File;
 use std::io::prelude::*;
 use std::collections::HashMap;
 use serde::Serialize;
-use crate::filesystem::{create_directories, validate_dir_entry, copy_files};
+use crate::filesystem::{create_directories, copy_files};
 use crate::cli::resolution::{resolve_project_name, resolve_project_target};
 
 
@@ -28,7 +26,6 @@ pub struct ModuleLevelSpec {
 
 struct ResolvedProjectLayout {
     dirs: Vec<PathBuf>,
-    names: Vec<String>,
     doxygen_groups: Vec<DoxygenGroup>,
     module_levels: HashMap<String, ModuleLevelSpec>,
 }
@@ -66,7 +63,7 @@ pub fn project_create(
         Err((error_code, src)) => { error_code.handler(src.as_deref()); }
     };
 
-    let (project_name, project_name_normalized) = resolve_project_name(project_name_parameter);
+    let (_project_name, project_name_normalized) = resolve_project_name(project_name_parameter);
 
     let project_target = match resolve_project_target(project_target_parameter) {
         Ok(project_target) => project_target,
@@ -180,86 +177,6 @@ fn validate_project_root(project_root: &Path) -> PomResult<()> {
 }
 
 
-// fn get_project_name(project_name_parameter: Option<String>) -> (String, String) {
-//     // `project_name` is to be used in documents read by humans, like README.md
-//     let project_name = prompt_if_missing_string(project_name_parameter, "Project name");
-//
-//     // `project_name_normalized` is to be used in paths
-//     let project_name_normalized = slugify_snake(&project_name);
-//
-//     (project_name, project_name_normalized)
-// }
-
-
-// fn get_project_target(project_target_parameter: Option<String>) -> PomResult<PathBuf> {
-//     let project_target_parameter = match project_target_parameter {
-//         Some(project_target_parameter) => project_target_parameter,
-//         None => "".to_string(),
-//     };
-//
-//     let default_source: &'static str= "assets/target";
-//     let target_files_sources: [&str; 1] = [
-//         default_source,
-//     ];
-//
-//     let mut available_targets: HashMap<String, PathBuf> = HashMap::new();
-//
-//     for source_str in target_files_sources {
-//         let source_path = Path::new(source_str);
-//         let entries =  match fs::read_dir(source_path) {
-//             Ok(entries) => entries,  // Shadowing
-//             Err(src) => {
-//                 return Err((
-//                     PomErrorCode::TargetFilesSourceReadFail,  // HERE - ERROR 71
-//                     Some(src.to_string()),
-//                 ))
-//             }
-//         };
-//
-//         for entry in entries {
-//             let entry = match entry {  // Shadowing
-//                 Ok(entry) => entry,  // Shadowing
-//                 Err(src) => {
-//                     return Err((
-//                         PomErrorCode::TargetFilesInvalidEntry,
-//                         Some(src.to_string()),
-//                     ));
-//                 }
-//             };
-//
-//             let entry_path = entry.path();
-//
-//             if entry_path.is_file() {
-//                 continue;  // Look for a target-specific directory
-//             }
-//
-//             let dir_name = match entry_path.file_name() {
-//                 Some(dir_name) => dir_name,
-//                 None => continue,  // Can't happen with default files
-//             };
-//
-//             let dir_name = dir_name.to_string_lossy().to_string();
-//
-//             if dir_name == project_target_parameter {
-//                 return Ok(entry_path);
-//             } else {
-//                 let entry_name = match source_str {
-//                     default_source => format!("{} (default)", dir_name),
-//                     _ => format!("{} (user)", dir_name),
-//                 };
-//
-//                 available_targets.insert(
-//                     entry_name,
-//                     entry_path,
-//                 );
-//             }
-//         }
-//     }
-//
-//     select_target(&available_targets)
-// }
-
-
 fn create_root_dir(project_root: &Path) -> PomResult<()> {  // `PathBuf` owns memory, `Path` is a borrowed view
 
     if project_root.exists() {
@@ -296,7 +213,7 @@ fn create_root_dir(project_root: &Path) -> PomResult<()> {  // `PathBuf` owns me
 fn resolve_project_layout(project_root: &Path, generation_layout: &[GenerationLayoutEntry]) -> PomResult<ResolvedProjectLayout> {
 
     let mut subdirs_list: Vec<PathBuf> = Vec::new();
-    let mut names_list: Vec<String> = Vec::new();
+    // let mut names_list: Vec<String> = Vec::new();
     let mut doxygen_groups_list: Vec<DoxygenGroup> = Vec::new();
     let mut module_levels_map: HashMap<String, ModuleLevelSpec> = HashMap::new();
 
@@ -309,7 +226,7 @@ fn resolve_project_layout(project_root: &Path, generation_layout: &[GenerationLa
             Ok(extracted_dir_name) => extracted_dir_name,
             Err(e) => return Err(e), // Propagate to caller without unpacking
         };
-        names_list.push(dir_name.to_string());
+        // names_list.push(dir_name.to_string());
 
         if let Some(group) = get_doxygen_group(&generation_layout_entry, &dir_name) {
             doxygen_groups_list.push(group);
@@ -324,7 +241,7 @@ fn resolve_project_layout(project_root: &Path, generation_layout: &[GenerationLa
 
     Ok( ResolvedProjectLayout{
         dirs: subdirs_list,
-        names: names_list,
+        // names: names_list,
         doxygen_groups: doxygen_groups_list,
         module_levels: module_levels_map,
     })

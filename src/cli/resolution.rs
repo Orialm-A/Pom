@@ -1,9 +1,10 @@
 use crate::prompt::{prompt_if_missing_string, slugify_snake, select_target};
-use crate::errors::{PomResult, PomErrorCode};
+use crate::errors::{PomResult};
+use crate::filesystem::{EntryKind, validate_dir_entry};
 
 use std::path::{PathBuf, Path};
 use std::collections::HashMap;
-use std::fs;
+use walkdir::{WalkDir};
 
 
 
@@ -19,69 +20,53 @@ pub fn resolve_project_name(project_name_parameter: Option<String>) -> (String, 
 
 
 pub fn resolve_project_target(project_target_parameter: Option<String>) -> PomResult<PathBuf> {
-    let project_target_parameter = match project_target_parameter {
-        Some(project_target_parameter) => project_target_parameter,
-        None => "".to_string(),
-    };
-
-    let default_source: &'static str= "assets/target";
+    const DEFAULT_SOURCE: &'static str= "assets/target";
     let target_files_sources: [&str; 1] = [
-        default_source,
+        DEFAULT_SOURCE,
     ];
 
     let mut available_targets: HashMap<String, PathBuf> = HashMap::new();
 
     for source_str in target_files_sources {
         let source_path = Path::new(source_str);
-        let entries =  match fs::read_dir(source_path) {
-            Ok(entries) => entries,  // Shadowing
-            Err(src) => {
-                return Err((
-                    PomErrorCode::TargetFilesSourceReadFail,  // HERE - ERROR 71
-                    Some(src.to_string()),
-                ))
-            }
-        };
 
-        for entry in entries {
-            let entry = match entry {  // Shadowing
-                Ok(entry) => entry,  // Shadowing
-                Err(src) => {
-                    return Err((
-                        PomErrorCode::TargetFilesInvalidEntry,
-                        Some(src.to_string()),
-                    ));
-                }
+        for entry in WalkDir::new(source_path).max_depth(1).min_depth(1).into_iter() {
+            // Depth = 0: Source itself
+            // Depth = 1: target directories, what must be selected
+            // Depth > 1: Target direcotires content
+
+            let validated_entry = validate_dir_entry(entry, source_path)?;
+
+            let entry_full_path = validated_entry.full_path;
+            let name = validated_entry.relative_path.to_string_lossy().to_string();
+
+            match validated_entry.kind {
+                EntryKind::File => { continue; }, // Look for a target-specific directory
+                EntryKind::Symlink => {
+                    println!("WARNING: `{}` is a symlink. It is not supported by pom current version.", name);
+                    continue;
+                    // Doesn't justify an error
+                },
+                EntryKind::Directory => {
+                    if let Some(ref wanted) = project_target_parameter {
+                        // Borrow the value inside `Some` instead of moving it
+                        if &name == wanted {
+                            return Ok(entry_full_path);
+                        }
+                    }
+
+                    let available_target_name = match source_str {
+                        DEFAULT_SOURCE => format!("{} (default)", name),
+                        _ => format!("{} (user)", name),
+                    };
+                    available_targets.insert(
+                        available_target_name,
+                        entry_full_path,
+                    );
+                },
             };
-
-            let entry_path = entry.path();
-
-            if entry_path.is_file() {
-                continue;  // Look for a target-specific directory
-            }
-
-            let dir_name = match entry_path.file_name() {
-                Some(dir_name) => dir_name,
-                None => continue,  // Can't happen with default files
-            };
-
-            let dir_name = dir_name.to_string_lossy().to_string();
-
-            if dir_name == project_target_parameter {
-                return Ok(entry_path);
-            } else {
-                let entry_name = match source_str {
-                    default_source => format!("{} (default)", dir_name),
-                    _ => format!("{} (user)", dir_name),
-                };
-
-                available_targets.insert(
-                    entry_name,
-                    entry_path,
-                );
-            }
         }
     }
 
-    select_target(&available_targets)
+    return select_target(&available_targets);
 }
