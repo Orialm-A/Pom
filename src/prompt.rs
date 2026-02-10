@@ -1,20 +1,24 @@
-use text_io::read;
 use unicode_normalization::UnicodeNormalization;
-use dialoguer::{Select, theme::ColorfulTheme};
+use dialoguer::{Select, Input, theme::ColorfulTheme};
 use crate::errors::{PomErrorCode, PomResult};
 use std::collections::HashMap;
 use std::path::{PathBuf,};
 
 
-pub fn prompt_if_missing_string(optional: Option<String>, prompt_hint: &str) -> String {
-    match optional {
-        Some(extracted_string) => { extracted_string },
+
+pub fn prompt_if_missing_string(optional_string: Option<String>, prompt_hint: &str) -> PomResult<String> {
+    match optional_string {
+        Some(optional_string) => Ok(optional_string),
         None => {
-            print!("{}: ", prompt_hint);
-            read!("{}\n") // From text_io
+            let prompted_string: String = Input::with_theme(&ColorfulTheme::default())
+                .with_prompt(prompt_hint)
+                .interact_text()
+                .map_err(|e| (PomErrorCode::PromptStringFail, Some(e.to_string())))?;
+            Ok(prompted_string)
         }
     }
 }
+
 
 pub fn slugify_snake(input: &str) -> String {
     let mut normalized_string = String::new();

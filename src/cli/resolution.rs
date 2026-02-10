@@ -8,14 +8,14 @@ use walkdir::{WalkDir};
 
 
 
-pub fn resolve_project_name(project_name_parameter: Option<String>) -> (String, String) {
+pub fn resolve_project_name(project_name_parameter: Option<String>) -> PomResult<(String, String)> {
     // `project_name` is to be used in documents read by humans, like README.md
-    let project_name = prompt_if_missing_string(project_name_parameter, "Project name");
+    let project_name = prompt_if_missing_string(project_name_parameter, "Project name")?;
 
     // `project_name_normalized` is to be used in paths
     let project_name_normalized = slugify_snake(&project_name);
 
-    (project_name, project_name_normalized)
+    Ok((project_name, project_name_normalized))
 }
 
 

@@ -33,6 +33,7 @@ pub enum PomErrorCode {
     FilesystemCopyFail = 39,
     // Prompt errors: 4x
     PromptTargetSelectionFail = 40,
+    PromptStringFail = 41,
     // `pom.toml` file errors: 5x
     PomTomlFileSerializationFail = 50,
     // Assets errors: 6x

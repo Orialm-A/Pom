@@ -61,7 +61,10 @@ pub fn project_create(
         Err((error_code, src)) => { error_code.handler(src.as_deref()); }
     };
 
-    let (_project_name, project_name_normalized) = resolve_project_name(project_name_parameter);
+    let (_project_name, project_name_normalized) = match resolve_project_name(project_name_parameter) {
+        Ok(values) => values,
+        Err((error_code, src)) => { error_code.handler(src.as_deref()); }
+    };
 
     let project_target = match resolve_project_target(project_target_parameter) {
         Ok(project_target) => project_target,
