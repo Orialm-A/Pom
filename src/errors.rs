@@ -22,22 +22,21 @@ pub enum PomErrorCode {
     GenerationLayoutFileInvalidEntryPath = 24,
     // Filesystem errors: 3x            // refac done
     FilesystemDirCreationFail = 30,
-    FilesystemEntryInvalid = 31,
-    FilesystemStripPathPrefixFail = 32,
-    FilesystemUnsupportedEntryType = 33,
-    FilesystemCopySourceMissing = 34,
-    FilesystemCopySourceNotDir = 35,
-    FilesystemCopyDestExists = 36,
-    FilesystemCopyFail = 37,
-    // File creation errors: 4x
-    FileCreationFail = 40,
-    FileWriteFail = 41,
+    FilesystemFileCreationFail = 31,
+    FilesystemFileWriteFail = 32,
+    FilesystemEntryInvalid = 33,
+    FilesystemStripPathPrefixFail = 34,
+    FilesystemUnsupportedEntryType = 35,
+    FilesystemCopySourceMissing = 36,
+    FilesystemCopySourceNotDir = 37,
+    FilesystemCopyDestExists = 38,
+    FilesystemCopyFail = 39,
+    // Prompt errors: 4x
+    PromptTargetSelectionFail = 40,
     // `pom.toml` file errors: 5x
     PomTomlFileSerializationFail = 50,
-    // Target files errors: 6x
-    TargetSelectionFail = 60,
-    // Assets errors: 7x
-    AssetsMissing = 70,  // Did not find expected files in default assets
+    // Assets errors: 6x
+    FileTemplateMissing = 70,  // Did not find expected files in default assets
 
 }
 
@@ -64,13 +63,10 @@ impl PomErrorCode {
             PomErrorCode::GenerationLayoutFileInvalidEntryPath => "The field `path` of a generation layout entry is invalid, failed to extract its name.",
             // subdirectories errors: 3x
             PomErrorCode::FilesystemDirCreationFail => "Failed to create a subdir for the project.",
-            // File creation errors: 4x
-            PomErrorCode::FileCreationFail => "Failed to create a file.",
-            PomErrorCode::FileWriteFail => "Successfully created a file but failed to fill it.",
             // `pom.toml` file errors: 5x
             PomErrorCode::PomTomlFileSerializationFail => "Failed to serialize project settings for `pom.toml`",
             // Target files errors: 7x
-            PomErrorCode::TargetSelectionFail => "An error occured when selecting the target.",
+            PomErrorCode::PromptTargetSelectionFail => "An error occured when selecting the target.",
             // Non fatal errors fallback
             _ => "Internal: missing config source was handled as fatal. This is a Pom bug.",
 

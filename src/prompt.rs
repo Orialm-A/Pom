@@ -49,7 +49,7 @@ pub fn select_target(available_targets: &HashMap<String, PathBuf>) -> PomResult<
     let mut keys: Vec<&String> = available_targets.keys().collect();
 
     if keys.is_empty() {
-        return Err((PomErrorCode::AssetsMissing, None));
+        return Err((PomErrorCode::FileTemplateMissing, Some("In `assets/target`".to_string())));
     }
 
     keys.sort();
@@ -60,7 +60,7 @@ pub fn select_target(available_targets: &HashMap<String, PathBuf>) -> PomResult<
         .default(0)
         .interact()
         .map_err(|e| (
-            PomErrorCode::TargetSelectionFail,
+            PomErrorCode::PromptTargetSelectionFail,
             Some(e.to_string()),
         ))?;
 

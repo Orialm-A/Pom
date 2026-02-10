@@ -5,8 +5,10 @@
 
 use std::path::{PathBuf, Path};
 use crate::errors::{PomErrorCode, PomResult};
-use std::fs;
+use std::fs::{self, File};
+use std::io::prelude::*;
 use walkdir::WalkDir;
+
 
 
 pub mod path_list {
@@ -104,7 +106,7 @@ pub struct ValidatedEntry {
 ///
 /// Existing directories are ignored
 /// Parents are created as needed
-/// May return `PomErrorCode::FilesystemDirCreationFail`
+/// May error `PomErrorCode::FilesystemDirCreationFail`
 pub fn create_directories(dirs_paths: &(impl path_list::PathList + ?Sized)) -> PomResult<()> {
     // Read parameter type as "A reference to a type implementing `PathList`"
     for dir_path in dirs_paths.iter_paths() {
@@ -125,7 +127,7 @@ pub fn create_directories(dirs_paths: &(impl path_list::PathList + ?Sized)) -> P
 
 /// Check if an entry gave by `WalkDir::new().into_iter()` is valid
 ///
-/// May return `PomErrorCode::FilesystemStripPathPrefixFail`
+/// May error `PomErrorCode::FilesystemStripPathPrefixFail`
 pub fn validate_dir_entry(entry: Result<walkdir::DirEntry, walkdir::Error>, source_root: &Path) -> PomResult<ValidatedEntry> {
     let entry = match entry {
         Ok(entry) => entry,
@@ -174,7 +176,7 @@ pub fn validate_dir_entry(entry: Result<walkdir::DirEntry, walkdir::Error>, sour
 /// Copy files contained in a directory from a source to a destination
 ///
 /// Create required sub directories to respect the source file tree
-/// May return `PomErrorCode::FilesystemCopyDestExists` or `FilesystemCopyDestExists`
+/// May error `PomErrorCode::FilesystemCopyDestExists` or `FilesystemCopyDestExists`
 pub fn copy_files(source_root: &Path, destination_root: &Path) -> PomResult<usize> {
     if !source_root.exists() {
         return Err((
@@ -234,4 +236,31 @@ pub fn copy_files(source_root: &Path, destination_root: &Path) -> PomResult<usiz
     }
 
     Ok(copy_count)
+}
+
+
+/// Write a file
+///
+/// Override if it exists
+/// May error `PomErrorCode::FilesystemFileCreationFail` or `FilesystemFileWriteFail`
+pub fn write_file(file_path: &Path, file_content: &str)  -> PomResult<()>  {
+    let mut file = match File::create_new(file_path) {
+        Ok(f) => f,
+        Err(src) => {
+            return Err((
+                PomErrorCode::FilesystemFileCreationFail,
+                Some(src.to_string()),
+            ));
+        }
+    };
+
+    match file.write_all(file_content.as_bytes()){
+        Ok(()) => { Ok(()) }
+        Err(src) => {
+            Err((
+                PomErrorCode::FilesystemFileWriteFail,
+                Some(src.to_string()),
+            ))
+        }
+    }
 }

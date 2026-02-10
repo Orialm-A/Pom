@@ -3,11 +3,9 @@ use std::path::{PathBuf, Path};
 use crate::errors::{PomErrorCode, PomResult};
 use crate::read_config_files::{read_generation_layout, GenerationLayoutEntry};
 use convert_case::{Case, Casing};
-use std::fs::File;
-use std::io::prelude::*;
 use std::collections::HashMap;
 use serde::Serialize;
-use crate::filesystem::{create_directories, copy_files};
+use crate::filesystem::{create_directories, copy_files, write_file};
 use crate::cli::resolution::{resolve_project_name, resolve_project_target};
 
 
@@ -322,29 +320,6 @@ fn generate_pom_toml_file(project_root: &Path, module_levels_list: &HashMap<Stri
 }
 
 
-fn write_file(file_path: &Path, file_content: &str)  -> PomResult<()>  {
-    let mut file = match File::create_new(file_path) {
-        Ok(f) => f,
-        Err(src) => {
-            return Err((
-                PomErrorCode::FileCreationFail,
-                Some(src.to_string()),
-            ));
-        }
-    };
-
-    match file.write_all(file_content.as_bytes()){
-        Ok(()) => { Ok(()) }
-        Err(src) => {
-            Err((
-                PomErrorCode::FileWriteFail,
-                Some(src.to_string()),
-            ))
-        }
-    }
-}
-
-
 fn generate_group_block(group: &DoxygenGroup) -> String {
     let mut group_block = String::new();
     group_block.push_str("/**\n");
@@ -380,8 +355,10 @@ fn copy_target_free_files(project_root: &Path) -> PomResult<()> {
 
         if !source_path.exists() {
             if files_source == default_source {
-                return Err((PomErrorCode::AssetsMissing, None));
-                // TODO: Must return the path to know what asset is missing
+                return Err((
+                    PomErrorCode::FileTemplateMissing,
+                    Some(format!("In `{}`", files_source)),
+                ));
             }
         }
 
@@ -391,7 +368,10 @@ fn copy_target_free_files(project_root: &Path) -> PomResult<()> {
                     if files_source == default_source {
                     // Should never get here!
                     // If no file has been copied from the default source, it means `assets/target_free` is empty: The repository has an issue, or the build output has an issue.
-                    return Err((PomErrorCode::AssetsMissing, None));
+                    return Err((
+                        PomErrorCode::FileTemplateMissing,
+                        Some(format!("In `{}`", files_source)),
+                    ));
                     } else {
                         continue;  // High priority empty, fall back to lower
                     }
