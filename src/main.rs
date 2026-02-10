@@ -10,9 +10,11 @@ use clap::Parser;
 use crate::cli::parameters::TopLevelCommands::*;
 use crate::cli::parameters::ProjectCommands as Proj;
 use crate::cli::parameters::ModuleCommands as Mod;
+
+// API
+use crate::project_create::project_create;
 use crate::pom_api as api;
 
-use crate::project_create::project_create;
 
 
 fn main() {

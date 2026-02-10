@@ -35,96 +35,41 @@ pub struct PomToml<'a> {
 
 
 pub fn project_create(
-    // The project name passed in the CLI
     project_name_parameter: Option<String>,
-    // The path where to create the project passed in the CLI
     project_root_parameter: Option<PathBuf>,
-    // What platform to compile the project for
     project_target_parameter: Option<String>,
-    // Print what would be done without creating / modifying files
     dry_run: bool
 ) -> PomResult<()> {
 
-    let generation_layout = read_generation_layout()?;
-
-    // let generation_layout = match read_generation_layout() {
-    //     Ok(extracted_generation_layout) => {extracted_generation_layout},
-    //     Err((error_code, src)) => { error_code.handler(src.as_deref()); }
-    // };
-
-    let project_root = match resolve_project_root(project_root_parameter) {
-        Ok(extracted_project_root) => { extracted_project_root },
-        Err((error_code, src)) => { error_code.handler(src.as_deref()); }
-    };
-
-    let (_project_name, project_name_normalized) = match resolve_project_name(project_name_parameter) {
-        Ok(values) => values,
-        Err((error_code, src)) => { error_code.handler(src.as_deref()); }
-    };
-
-    let project_target = match resolve_project_target(project_target_parameter) {
-        Ok(project_target) => project_target,
-        Err((error_code, src)) => { error_code.handler(src.as_deref()); }
-    };
-
+    // Resolve user parameters
+    let project_root = resolve_project_root(project_root_parameter)?;
+    let (_project_name, project_name_normalized) = resolve_project_name(project_name_parameter)?;
     let project_root = project_root.join(&project_name_normalized);
 
-    println!(
-        "Generate project directory `{}`...",
-        project_root.display()
-    );
+    let project_target = resolve_project_target(project_target_parameter)?;
 
-    if !dry_run {
-        match create_root_dir(&project_root) {
-            Ok(()) => {},
-            Err((error_code, src)) => {error_code.handler(src.as_deref()); }
-        }
-    }
+    // Resolve project layout
+    let generation_layout = read_generation_layout()?;
+    let resolved_project_layout = resolve_project_layout(&project_root, &generation_layout)?;
 
-    let resolved_project_layout = match resolve_project_layout(&project_root, &generation_layout) {
-        Ok(extracted_resolved_project_layout) => { extracted_resolved_project_layout },
-        Err((error_code, src)) => { error_code.handler(src.as_deref()); }
-    };
+    // Action
+    println!("Generate project directory at `{}`...", project_root.display());
+    if !dry_run { create_root_dir(&project_root)?; }
 
     println!("Generate subdirectories...");
-    if !dry_run {
-        match create_directories(&resolved_project_layout.dirs) {
-            Ok(()) => {},
-            Err((error_code, src)) => {error_code.handler(src.as_deref()); }
-        }
-    }
+    if !dry_run { create_directories(&resolved_project_layout.dirs)?; }
 
     println!("Generate `doc_groups.h`...");
-    if !dry_run {
-        match generate_doc_groups_file(&project_root, &resolved_project_layout.doxygen_groups) {
-            Ok(()) => {},
-            Err((error_code, src)) => {error_code.handler(src.as_deref()); }
-        }
-    }
+    if !dry_run { generate_doc_groups_file(&project_root, &resolved_project_layout.doxygen_groups)?; }
 
     println!("Generate `pom.toml`...");
-    if !dry_run {
-        match generate_pom_toml_file(&project_root, &resolved_project_layout.module_levels) {
-            Ok(()) => {},
-            Err((error_code, src)) => {error_code.handler(src.as_deref()); }
-        }
-    }
+    if !dry_run { generate_pom_toml_file(&project_root, &resolved_project_layout.module_levels)?;}
 
     println!("Generate target-free files...");
-    if !dry_run {
-        match copy_target_free_files(&project_root) {
-            Ok(()) => {},
-            Err((error_code, src)) => {error_code.handler(src.as_deref()); }
-        }
-    }
+    if !dry_run { copy_target_free_files(&project_root)?; }
 
     println!("Generate target-specific files...");
-    if !dry_run {
-        match copy_files(&project_target, &project_root) {
-            Ok(_) => {},
-            Err((error_code, src)) => {error_code.handler(src.as_deref()); }
-        }
-    }
+    if !dry_run { copy_files(&project_target, &project_root)?; }
 
     Ok(())
 }
