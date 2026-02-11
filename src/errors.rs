@@ -29,8 +29,8 @@ pub enum PomErrorCode {
     FilesystemUnsupportedEntryType = 35,
     FilesystemCopySourceMissing = 36,
     FilesystemCopySourceNotDir = 37,
-    FilesystemCopyDestExists = 38,          // Override protection for copy but not write is incoherent. Gotta add an override policy parameter and generalize this error
-    FilesystemCopyFail = 39,
+    FilesystemCopyFail = 38,
+    FilesystemFileOverwriteForbidded = 39,
     // Prompt errors: 4x
     PromptTargetSelectionFail = 40,
     PromptStringFail = 41,
@@ -72,8 +72,8 @@ impl PomErrorCode {
             Self::FilesystemUnsupportedEntryType => "Unsupported filesystem entry type found.",
             Self::FilesystemCopySourceMissing => "Copy source is missing.",
             Self::FilesystemCopySourceNotDir => "Copy source is not a directory.",
-            Self::FilesystemCopyDestExists => "Copy destination already exists.",
             Self::FilesystemCopyFail => "Copy failed.",
+            Self::FilesystemFileOverwriteForbidded => "File copy or creation failed because overwrite is forbidden by policy.",
 
             // Prompt errors
             Self::PromptTargetSelectionFail => "Failed to prompt for target selection.",

@@ -5,8 +5,8 @@
 
 use std::path::{PathBuf, Path};
 use crate::errors::{PomErrorCode, PomResult};
-use std::fs::{self, File};
-use std::io::prelude::*;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
 use walkdir::WalkDir;
 
 
@@ -102,6 +102,14 @@ pub struct ValidatedEntry {
 }
 
 
+/// Represents the action to take when a file write or copy conflicts with an existing file
+#[derive(PartialEq)]
+pub enum ExistingFilePolicy {
+    // Overwrite,  // Cancel "unused" warning for now
+    Fail,
+}
+
+
 /// Create directories passed by reference
 ///
 /// Existing directories are ignored
@@ -176,8 +184,8 @@ pub fn validate_dir_entry(entry: Result<walkdir::DirEntry, walkdir::Error>, sour
 /// Copy files contained in a directory from a source to a destination
 ///
 /// Create required sub directories to respect the source file tree
-/// May error `PomErrorCode::FilesystemCopyDestExists` or `FilesystemCopyDestExists`
-pub fn copy_files(source_root: &Path, destination_root: &Path) -> PomResult<usize> {
+/// May error `PomErrorCode::FilesystemFileOverwriteForbidded` or `FilesystemCopyFail`
+pub fn copy_files(source_root: &Path, destination_root: &Path, existing_file_policy: ExistingFilePolicy) -> PomResult<usize> {
     if !source_root.exists() {
         return Err((
             PomErrorCode::FilesystemCopySourceMissing,
@@ -216,10 +224,13 @@ pub fn copy_files(source_root: &Path, destination_root: &Path) -> PomResult<usiz
             },
             EntryKind::File => {
                 if destination_path.exists() {
-                    return Err((
-                        PomErrorCode::FilesystemCopyDestExists,
-                        Some(format!("`{}` already exists.", destination_path.display())),
-                    ));
+                    if existing_file_policy == ExistingFilePolicy::Fail {
+                        return Err((
+                            PomErrorCode::FilesystemFileOverwriteForbidded,
+                            Some(format!("`{}` already exists.", destination_path.display())),
+                        ));
+
+                    }
                 }
 
                 match fs::copy(&entry_full_path, &destination_path) {
@@ -242,17 +253,24 @@ pub fn copy_files(source_root: &Path, destination_root: &Path) -> PomResult<usiz
 /// Write a file
 ///
 /// Override if it exists
-/// May error `PomErrorCode::FilesystemFileCreationFail` or `FilesystemFileWriteFail`
-pub fn write_file(file_path: &Path, file_content: &str)  -> PomResult<()>  {
-    let mut file = match File::create_new(file_path) {
-        Ok(f) => f,
-        Err(src) => {
+/// May error `PomErrorCode::FilesystemFileCreationFail`, `FilesystemFileWriteFail` or `FilesystemFileOverwriteForbidded`
+pub fn write_file(file_path: &Path, file_content: &str, existing_file_policy: ExistingFilePolicy)  -> PomResult<()>  {
+    if file_path.exists() {
+        if existing_file_policy == ExistingFilePolicy::Fail {
             return Err((
-                PomErrorCode::FilesystemFileCreationFail,
-                Some(src.to_string()),
+                PomErrorCode::FilesystemFileOverwriteForbidded,
+                Some(format!("`{}` already exists.", file_path.display())),
             ));
+
         }
-    };
+    }
+
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true) // <-- THIS erases previous content
+        .open(&file_path)
+        .map_err(|e| (PomErrorCode::FilesystemFileCreationFail, Some(e.to_string())))?;
 
     match file.write_all(file_content.as_bytes()){
         Ok(()) => { Ok(()) }

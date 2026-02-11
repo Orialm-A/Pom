@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use serde::Serialize;
 
 use crate::errors::{PomErrorCode, PomResult};
-use crate::filesystem::{create_directories, copy_files, write_file};
+use crate::filesystem::{create_directories, copy_files, write_file, ExistingFilePolicy};
 use crate::cli::resolution::{resolve_project_name, resolve_project_target, resolve_project_root};
 use crate::project_layout::{resolve_project_layout, DoxygenGroup, ModuleLevelSpec};
 
@@ -49,7 +49,7 @@ pub fn project_create(
     if !dry_run { copy_target_free_files(&project_root)?; }
 
     println!("Create target-specific files...");
-    if !dry_run { copy_files(&project_target, &project_root)?; }
+    if !dry_run { copy_files(&project_target, &project_root, ExistingFilePolicy::Fail)?; }
 
     Ok(())
 }
@@ -96,7 +96,7 @@ fn create_doc_groups_file(project_root: &Path, groups_list: &[DoxygenGroup]) -> 
         doc_groups_file_content.push_str(&create_group_block(group));
     }
 
-    write_file(&doc_groups_file_path, &doc_groups_file_content)
+    write_file(&doc_groups_file_path, &doc_groups_file_content, ExistingFilePolicy::Fail)
 }
 
 
@@ -113,7 +113,7 @@ fn create_pom_toml_file(project_root: &Path, module_levels_list: &HashMap<String
         )
     )?;
 
-    write_file(&pom_toml_file_path, &pom_toml_file_content)
+    write_file(&pom_toml_file_path, &pom_toml_file_content, ExistingFilePolicy::Fail)
 }
 
 
@@ -159,7 +159,7 @@ fn copy_target_free_files(project_root: &Path) -> PomResult<()> {
             }
         }
 
-        match copy_files(source_path, project_root) {
+        match copy_files(&source_path, &project_root, ExistingFilePolicy::Fail) {
             Ok(file_count) => {
                 if file_count == 0 {
                     if files_source == default_source {
