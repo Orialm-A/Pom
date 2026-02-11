@@ -111,6 +111,14 @@ pub enum ExistingFilePolicy {
 }
 
 
+#[derive(PartialEq)]
+pub enum CopyPolicy {
+    PlainFilesOnly,
+    RenderedFilesOnly,
+    // Both
+}
+
+
 /// Create directories passed by reference
 ///
 /// Existing directories are ignored
@@ -186,7 +194,7 @@ pub fn validate_dir_entry(entry: Result<walkdir::DirEntry, walkdir::Error>, sour
 ///
 /// Create required sub directories to respect the source file tree
 /// May error `PomErrorCode::FilesystemFileOverwriteForbidded` or `FilesystemCopyFail`
-pub fn copy_files(source_root: &Path, destination_root: &Path, existing_file_policy: ExistingFilePolicy) -> PomResult<usize> {
+pub fn copy_files(source_root: &Path, destination_root: &Path, existing_file_policy: ExistingFilePolicy, copy_policy: CopyPolicy) -> PomResult<usize> {
     if !source_root.exists() {
         return Err((
             PomErrorCode::FilesystemCopySourceMissing,
@@ -234,14 +242,12 @@ pub fn copy_files(source_root: &Path, destination_root: &Path, existing_file_pol
                     }
                 }
 
-                match fs::copy(&entry_full_path, &destination_path) {
-                    Ok(_) => copy_count += 1,
-                    Err(src) => {
-                        return Err((
-                            PomErrorCode::FilesystemCopyFail,
-                            Some(format!("{}: {}", entry_full_path.display(), src)),
-                        ));
+                if let Some(_rendered_destination_path) = get_rendered_template(&destination_path){
+                    if copy_policy != CopyPolicy::PlainFilesOnly {
+                        // copy_count+= create_rendered_file(&entry_full_path, &rendered_destination_path)?;  // Not implemented yet
                     }
+                } else if copy_policy != CopyPolicy::RenderedFilesOnly {
+                    copy_count += plain_copy_helper(&entry_full_path, &destination_path)?;
                 }
             },
         };
@@ -249,6 +255,36 @@ pub fn copy_files(source_root: &Path, destination_root: &Path, existing_file_pol
 
     Ok(copy_count)
 }
+
+
+fn plain_copy_helper(entry_path: &Path, destination_path: &Path) -> PomResult<usize> {
+    match fs::copy(&entry_path, &destination_path) {
+        Ok(_) => { return Ok(1); }
+        Err(src) => {
+            return Err((
+                PomErrorCode::FilesystemCopyFail,
+                Some(format!("{}: {}", entry_path.display(), src)),
+            ));
+        }
+    }
+}
+
+
+
+fn get_rendered_template(template_path: &Path) -> Option<PathBuf> {
+    // Check extension
+    if template_path.extension()? != "pomrt" {
+        return None;
+    }
+
+    // Remove the `.pomtpl` extension
+    let mut stripped = template_path.to_path_buf();
+    stripped.set_extension("");
+
+    Some(stripped)
+}
+
+
 
 
 /// Write a file
@@ -283,6 +319,7 @@ pub fn write_file(file_path: &Path, file_content: &str, existing_file_policy: Ex
         }
     }
 }
+
 
 
 #[cfg(test)]
@@ -491,7 +528,7 @@ mod tests{
             fs::write(src_root.join("a/file1.txt"), "one").unwrap();
             fs::write(src_root.join("a/b/file2.txt"), "two").unwrap();
 
-            let n = copy_files(src_root, dst_root, ExistingFilePolicy::Overwrite).unwrap();
+            let n = copy_files(src_root, dst_root, ExistingFilePolicy::Overwrite, CopyPolicy::PlainFilesOnly).unwrap();
             assert_eq!(n, 3);
 
             assert_eq!(read_to_string(&dst_root.join("root.txt")), "root");
@@ -507,6 +544,7 @@ mod tests{
                 std::path::Path::new("this-path-should-not-exist-___"),
                 dst.path(),
                 ExistingFilePolicy::Overwrite,
+                // CopyPolicy::PlainFilesOnly,
             )
             .unwrap_err();
 
@@ -521,7 +559,7 @@ mod tests{
             let file = src.path().join("not_a_dir.txt");
             fs::write(&file, "x").unwrap();
 
-            let err = copy_files(&file, dst.path(), ExistingFilePolicy::Overwrite).unwrap_err();
+            let err = copy_files(&file, dst.path(), ExistingFilePolicy::Overwrite, CopyPolicy::PlainFilesOnly).unwrap_err();
             assert_eq!(err.0, PomErrorCode::FilesystemCopySourceNotDir);
         }
 
@@ -535,7 +573,7 @@ mod tests{
             // Pre-create destination file with same relative path
             fs::write(dst.path().join("a.txt"), "DST").unwrap();
 
-            let err = copy_files(src.path(), dst.path(), ExistingFilePolicy::Fail).unwrap_err();
+            let err = copy_files(src.path(), dst.path(), ExistingFilePolicy::Fail, CopyPolicy::PlainFilesOnly).unwrap_err();
             assert_eq!(err.0, PomErrorCode::FilesystemFileOverwriteForbidded);
         }
 
@@ -547,7 +585,7 @@ mod tests{
             fs::write(src.path().join("a.txt"), "NEW").unwrap();
             fs::write(dst.path().join("a.txt"), "OLD").unwrap();
 
-            let n = copy_files(src.path(), dst.path(), ExistingFilePolicy::Overwrite).unwrap();
+            let n = copy_files(src.path(), dst.path(), ExistingFilePolicy::Overwrite, CopyPolicy::PlainFilesOnly).unwrap();
             assert_eq!(n, 1);
 
             let content = read_to_string(&dst.path().join("a.txt"));
@@ -564,7 +602,7 @@ mod tests{
             fs::write(src.path().join("real.txt"), "REAL").unwrap();
             symlink(src.path().join("real.txt"), src.path().join("link.txt")).unwrap();
 
-            let n = copy_files(src.path(), dst.path(), ExistingFilePolicy::Overwrite).unwrap();
+            let n = copy_files(src.path(), dst.path(), ExistingFilePolicy::Overwrite, CopyPolicy::PlainFilesOnly).unwrap();
 
             // Only real.txt copied; link.txt should be skipped
             assert_eq!(n, 1);

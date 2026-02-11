@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use serde::Serialize;
 
 use crate::errors::{PomErrorCode, PomResult};
-use crate::filesystem::{create_directories, copy_files, write_file, ExistingFilePolicy};
+use crate::filesystem::{create_directories, copy_files, write_file, ExistingFilePolicy, CopyPolicy};
 use crate::cli::resolution::{resolve_project_name, resolve_project_target, resolve_project_root};
 use crate::project_layout::{resolve_project_layout, DoxygenGroup, ModuleLevelSpec};
 
@@ -49,7 +49,7 @@ pub fn project_create(
     if !dry_run { copy_target_free_files(&project_root)?; }
 
     println!("Create target-specific files...");
-    if !dry_run { copy_files(&project_target, &project_root, ExistingFilePolicy::Fail)?; }
+    if !dry_run { copy_files(&project_target, &project_root, ExistingFilePolicy::Fail, CopyPolicy::PlainFilesOnly)?; }
 
     Ok(())
 }
@@ -159,7 +159,7 @@ fn copy_target_free_files(project_root: &Path) -> PomResult<()> {
             }
         }
 
-        match copy_files(&source_path, &project_root, ExistingFilePolicy::Fail) {
+        match copy_files(&source_path, &project_root, ExistingFilePolicy::Fail, CopyPolicy::PlainFilesOnly) {
             Ok(file_count) => {
                 if file_count == 0 {
                     if files_source == default_source {
