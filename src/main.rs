@@ -5,6 +5,7 @@ mod prompt;
 mod errors;
 mod project_layout;
 mod filesystem;
+mod template_rendering;
 
 use clap::Parser;
 use crate::cli::parameters::TopLevelCommands::*;
