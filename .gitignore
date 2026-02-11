@@ -1,3 +1,4 @@
 target/
 *.kate-swp
 notebook_development.md
+debug
