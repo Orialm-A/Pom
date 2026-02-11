@@ -189,3 +189,69 @@ fn get_module_level_spec(generation_layout_entry: &GenerationLayoutEntry) -> Opt
         })
     } else { None }
 }
+
+
+#[cfg(test)]
+mod tests{
+    use super::*;
+
+    mod dir_name_extraction {
+        use super::*;
+
+        #[test]
+        fn extracts_last_component_normal_path() {
+            let p = std::path::Path::new("src/app");
+            let name = get_dir_name(p).unwrap();
+            assert_eq!(name, "app");
+        }
+
+        #[test]
+        fn extracts_last_component_with_trailing_slash() {
+            let p = std::path::Path::new("src/app/");
+            let name = get_dir_name(p).unwrap();
+            assert_eq!(name, "app");
+        }
+
+        #[test]
+        fn fails_on_empty_path() {
+            let p = std::path::Path::new("");
+            let err = get_dir_name(p).unwrap_err();
+            assert_eq!(err.0, PomErrorCode::GenerationLayoutFileInvalidEntryPath);
+        }
+    }
+
+
+    mod doxygen_groups_generation {
+        use super::*;
+
+        #[test]
+        fn returns_none_when_no_defgroup_and_no_brief() {
+            let entry = GenerationLayoutEntry {
+                path: "src/app".into(),
+                defgroup: None,
+                brief: None,
+                contains_modules: false,
+                module_prefix: None,
+            };
+
+            let group = get_doxygen_group(&entry, "app");
+            assert!(group.is_none());
+        }
+
+        #[test]
+        fn creates_group_when_defgroup_or_brief_present() {
+            let entry = GenerationLayoutEntry {
+                path: "src/app".into(),
+                defgroup: Some("Application Layer".into()),
+                brief: Some("High-level behavior.".into()),
+                contains_modules: false,
+                module_prefix: None,
+            };
+
+            let group = get_doxygen_group(&entry, "app").unwrap();
+            assert_eq!(group.name, "app");
+            assert_eq!(group.defgroup.as_deref(), Some("Application Layer"));
+            assert_eq!(group.brief.as_deref(), Some("High-level behavior."));
+        }
+    }
+}

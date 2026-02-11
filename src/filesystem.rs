@@ -94,6 +94,7 @@ pub enum EntryKind {
 }
 
 
+#[derive(Debug)]
 /// Represents the data extracted from a `WalkDir::EntryDir` after validation
 pub struct ValidatedEntry {
     pub full_path: PathBuf,
@@ -105,7 +106,7 @@ pub struct ValidatedEntry {
 /// Represents the action to take when a file write or copy conflicts with an existing file
 #[derive(PartialEq)]
 pub enum ExistingFilePolicy {
-    // Overwrite,  // Cancel "unused" warning for now
+    // Overwrite,  // Cancel "unused" warning for now - make it available during unit tests
     Fail,
 }
 
@@ -279,6 +280,338 @@ pub fn write_file(file_path: &Path, file_content: &str, existing_file_policy: Ex
                 PomErrorCode::FilesystemFileWriteFail,
                 Some(src.to_string()),
             ))
+        }
+    }
+}
+
+
+#[cfg(test)]
+mod tests{
+    use super::*;
+    use tempfile::tempdir;
+    use std::io::Read;
+
+    mod subdirs_creation {
+        use super::*;
+        use std::fs::File;
+
+        #[test]
+        fn creates_dirs_when_missing() {
+            let tmp = tempfile::tempdir().unwrap();
+            let project_root = tmp.path();
+
+            let dirs = vec![
+                project_root.join("src/app"),
+                project_root.join("resources/doc"),
+            ];
+
+            create_directories(&dirs).unwrap();
+
+            assert!(project_root.join("src").is_dir());
+            assert!(project_root.join("src/app").is_dir());
+            assert!(project_root.join("resources/doc").is_dir());
+        }
+
+        #[test]
+        fn succeeds_if_dirs_already_exist() {
+            let tmp = tempfile::tempdir().unwrap();
+            let project_root = tmp.path();
+
+            fs::create_dir_all(project_root.join("src/app")).unwrap();
+
+            let dirs = vec![
+                project_root.join("src/app"),
+                project_root.join("resources/doc"),
+            ];
+
+            create_directories(&dirs).unwrap();
+
+            assert!(project_root.join("src/app").is_dir());
+            assert!(project_root.join("resources/doc").is_dir());
+        }
+
+        #[test]
+        fn fails_if_dir_path_is_blocked_by_file() {
+            let tmp = tempfile::tempdir().unwrap();
+            let project_root = tmp.path();
+
+            // Create a file "src" so "src/app" cannot become a directory
+            File::create(project_root.join("src")).unwrap();
+
+            let dirs = vec![
+                project_root.join("src/app"),
+            ];
+
+            let err = create_directories(&dirs).unwrap_err();
+            assert_eq!(err.0, PomErrorCode::FilesystemDirCreationFail);
+        }
+    }
+
+    mod validate_dir_entry_tests {
+        use super::*;
+
+        #[test]
+        fn validate_dir_entry_file_ok_relative_path_and_kind() {
+            let src = tempdir().unwrap();
+            let src_root = src.path();
+
+            let nested = src_root.join("a/b");
+            fs::create_dir_all(&nested).unwrap();
+
+            let file_path = nested.join("hello.txt");
+            fs::write(&file_path, b"hi").unwrap();
+
+            // WalkDir yields the root first, then children. We'll find our file entry.
+            let entry = walkdir::WalkDir::new(src_root)
+                .into_iter()
+                .find_map(|e| match e {
+                    Ok(de) if de.path() == file_path => Some(Ok(de)),
+                    Ok(_) => None,
+                    Err(err) => Some(Err(err)),
+                })
+                .expect("expected to find the file entry");
+
+            let validated = validate_dir_entry(entry, src_root).unwrap();
+
+            assert_eq!(validated.full_path, file_path);
+            assert_eq!(validated.relative_path, std::path::PathBuf::from("a/b/hello.txt"));
+            assert!(matches!(validated.kind, EntryKind::File));
+        }
+
+        #[test]
+        fn validate_dir_entry_dir_ok_relative_path_and_kind() {
+            let src = tempdir().unwrap();
+            let src_root = src.path();
+
+            let nested = src_root.join("dir1/dir2");
+            fs::create_dir_all(&nested).unwrap();
+
+            let entry = walkdir::WalkDir::new(src_root)
+                .into_iter()
+                .find_map(|e| match e {
+                    Ok(de) if de.path() == nested => Some(Ok(de)),
+                    Ok(_) => None,
+                    Err(err) => Some(Err(err)),
+                })
+                .expect("expected to find the dir entry");
+
+            let validated = validate_dir_entry(entry, src_root).unwrap();
+
+            assert_eq!(validated.full_path, nested);
+            assert_eq!(validated.relative_path, std::path::PathBuf::from("dir1/dir2"));
+            assert!(matches!(validated.kind, EntryKind::Directory));
+        }
+
+        #[test]
+        fn validate_dir_entry_err_is_mapped() {
+            let src = tempdir().unwrap();
+            let src_root = src.path();
+
+            // Force a WalkDir error by iterating a non-existent path.
+            let mut it = walkdir::WalkDir::new(src_root.join("does-not-exist")).into_iter();
+            let first = it.next().expect("expected an item (Err) from iterator");
+
+            let err = validate_dir_entry(first, src_root).unwrap_err();
+            assert_eq!(err.0, PomErrorCode::FilesystemEntryInvalid);
+            assert!(err.1.is_some());
+        }
+
+        #[test]
+        fn validate_dir_entry_strip_prefix_fail_is_mapped() {
+            let src = tempdir().unwrap();
+            let src_root = src.path();
+
+            let file_path = src_root.join("x.txt");
+            fs::write(&file_path, b"x").unwrap();
+
+            let entry = walkdir::WalkDir::new(src_root)
+                .into_iter()
+                .find_map(|e| match e {
+                    Ok(de) if de.path() == file_path => Some(Ok(de)),
+                    Ok(_) => None,
+                    Err(err) => Some(Err(err)),
+                })
+                .expect("expected to find file entry");
+
+            // Pass a different root so strip_prefix fails
+            let other_root = tempdir().unwrap();
+
+            let err = validate_dir_entry(entry, other_root.path()).unwrap_err();
+            assert_eq!(err.0, PomErrorCode::FilesystemStripPathPrefixFail);
+            assert!(err.1.is_some());
+        }
+
+        #[test]
+        fn validate_dir_entry_unsupported_entry_type_fifo() {
+            use std::ffi::CString;
+
+            let src = tempdir().unwrap();
+            let src_root = src.path();
+
+            let fifo_path = src_root.join("myfifo");
+            let cpath = CString::new(fifo_path.to_string_lossy().as_bytes()).unwrap();
+            let rc = unsafe { libc::mkfifo(cpath.as_ptr(), 0o644) };
+            assert_eq!(rc, 0, "mkfifo failed");
+
+            let entry = walkdir::WalkDir::new(src_root)
+                .into_iter()
+                .find_map(|e| match e {
+                    Ok(de) if de.path() == fifo_path => Some(Ok(de)),
+                    Ok(_) => None,
+                    Err(err) => Some(Err(err)),
+                })
+                .expect("expected to find fifo entry");
+
+            let err = validate_dir_entry(entry, src_root).unwrap_err();
+            assert_eq!(err.0, PomErrorCode::FilesystemUnsupportedEntryType);
+            assert!(err.1.unwrap().contains("myfifo"));
+        }
+
+    }
+
+    mod copy_files_tests {
+        use super::*;
+
+        fn read_to_string(p: &std::path::Path) -> String {
+            let mut s = String::new();
+            fs::File::open(p).unwrap().read_to_string(&mut s).unwrap();
+            s
+        }
+
+        #[test]
+        fn copy_files_copies_tree_and_counts_files() {
+            let src = tempdir().unwrap();
+            let dst = tempdir().unwrap();
+
+            let src_root = src.path();
+            let dst_root = dst.path();
+
+            fs::create_dir_all(src_root.join("a/b")).unwrap();
+            fs::write(src_root.join("root.txt"), "root").unwrap();
+            fs::write(src_root.join("a/file1.txt"), "one").unwrap();
+            fs::write(src_root.join("a/b/file2.txt"), "two").unwrap();
+
+            let n = copy_files(src_root, dst_root, ExistingFilePolicy::Overwrite).unwrap();
+            assert_eq!(n, 3);
+
+            assert_eq!(read_to_string(&dst_root.join("root.txt")), "root");
+            assert_eq!(read_to_string(&dst_root.join("a/file1.txt")), "one");
+            assert_eq!(read_to_string(&dst_root.join("a/b/file2.txt")), "two");
+            assert!(dst_root.join("a/b").is_dir());
+        }
+
+        #[test]
+        fn copy_files_fails_if_source_missing() {
+            let dst = tempdir().unwrap();
+            let err = copy_files(
+                std::path::Path::new("this-path-should-not-exist-___"),
+                dst.path(),
+                ExistingFilePolicy::Overwrite,
+            )
+            .unwrap_err();
+
+            assert_eq!(err.0, PomErrorCode::FilesystemCopySourceMissing);
+        }
+
+        #[test]
+        fn copy_files_fails_if_source_not_dir() {
+            let src = tempdir().unwrap();
+            let dst = tempdir().unwrap();
+
+            let file = src.path().join("not_a_dir.txt");
+            fs::write(&file, "x").unwrap();
+
+            let err = copy_files(&file, dst.path(), ExistingFilePolicy::Overwrite).unwrap_err();
+            assert_eq!(err.0, PomErrorCode::FilesystemCopySourceNotDir);
+        }
+
+        #[test]
+        fn copy_files_fails_on_existing_file_when_policy_fail() {
+            let src = tempdir().unwrap();
+            let dst = tempdir().unwrap();
+
+            fs::write(src.path().join("a.txt"), "SRC").unwrap();
+
+            // Pre-create destination file with same relative path
+            fs::write(dst.path().join("a.txt"), "DST").unwrap();
+
+            let err = copy_files(src.path(), dst.path(), ExistingFilePolicy::Fail).unwrap_err();
+            assert_eq!(err.0, PomErrorCode::FilesystemFileOverwriteForbidded);
+        }
+
+        #[test]
+        fn copy_files_overwrites_existing_file_when_policy_allows() {
+            let src = tempdir().unwrap();
+            let dst = tempdir().unwrap();
+
+            fs::write(src.path().join("a.txt"), "NEW").unwrap();
+            fs::write(dst.path().join("a.txt"), "OLD").unwrap();
+
+            let n = copy_files(src.path(), dst.path(), ExistingFilePolicy::Overwrite).unwrap();
+            assert_eq!(n, 1);
+
+            let content = read_to_string(&dst.path().join("a.txt"));
+            assert_eq!(content, "NEW");
+        }
+
+        #[test]
+        fn copy_files_skips_symlinks() {
+            use std::os::unix::fs::symlink;
+
+            let src = tempdir().unwrap();
+            let dst = tempdir().unwrap();
+
+            fs::write(src.path().join("real.txt"), "REAL").unwrap();
+            symlink(src.path().join("real.txt"), src.path().join("link.txt")).unwrap();
+
+            let n = copy_files(src.path(), dst.path(), ExistingFilePolicy::Overwrite).unwrap();
+
+            // Only real.txt copied; link.txt should be skipped
+            assert_eq!(n, 1);
+            assert!(dst.path().join("real.txt").exists());
+            assert!(!dst.path().join("link.txt").exists());
+        }
+    }
+
+    mod write_file_tests {
+        use super::*;
+
+        fn read_to_string(p: &std::path::Path) -> String {
+            let mut s = String::new();
+            fs::File::open(p).unwrap().read_to_string(&mut s).unwrap();
+            s
+        }
+
+        #[test]
+        fn write_file_creates_and_writes() {
+            let dir = tempdir().unwrap();
+            let p = dir.path().join("x.txt");
+
+            write_file(&p, "hello", ExistingFilePolicy::Overwrite).unwrap();
+            assert_eq!(read_to_string(&p), "hello");
+        }
+
+        #[test]
+        fn write_file_overwrites_and_truncates() {
+            let dir = tempdir().unwrap();
+            let p = dir.path().join("x.txt");
+
+            fs::write(&p, "0123456789").unwrap();
+            write_file(&p, "abc", ExistingFilePolicy::Overwrite).unwrap();
+
+            // truncate(true) should have removed old tail
+            assert_eq!(read_to_string(&p), "abc");
+        }
+
+        #[test]
+        fn write_file_fails_if_exists_and_policy_fail() {
+            let dir = tempdir().unwrap();
+            let p = dir.path().join("x.txt");
+
+            fs::write(&p, "existing").unwrap();
+            let err = write_file(&p, "new", ExistingFilePolicy::Fail).unwrap_err();
+
+            assert_eq!(err.0, PomErrorCode::FilesystemFileOverwriteForbidded);
         }
     }
 }

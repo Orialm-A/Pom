@@ -187,8 +187,7 @@ fn copy_target_free_files(project_root: &Path) -> PomResult<()> {
 mod tests{
     use super::*;
     use std::fs::{self, File};
-    use std::path::Path;
-    use std::io::{Read, Write};
+    use std::io::Read;
 
 
     mod root_creation {
@@ -250,118 +249,8 @@ mod tests{
     }
 
 
-    mod subdirs_creation {
+    mod doxygen_file_creation {
         use super::*;
-
-        #[test]
-        fn creates_dirs_when_missing() {
-            let tmp = tempfile::tempdir().unwrap();
-            let project_root = tmp.path();
-
-            let dirs = vec![
-                project_root.join("src/app"),
-                project_root.join("resources/doc"),
-            ];
-
-            create_directories(&dirs).unwrap();
-
-            assert!(project_root.join("src").is_dir());
-            assert!(project_root.join("src/app").is_dir());
-            assert!(project_root.join("resources/doc").is_dir());
-        }
-
-        #[test]
-        fn succeeds_if_dirs_already_exist() {
-            let tmp = tempfile::tempdir().unwrap();
-            let project_root = tmp.path();
-
-            fs::create_dir_all(project_root.join("src/app")).unwrap();
-
-            let dirs = vec![
-                project_root.join("src/app"),
-                project_root.join("resources/doc"),
-            ];
-
-            create_directories(&dirs).unwrap();
-
-            assert!(project_root.join("src/app").is_dir());
-            assert!(project_root.join("resources/doc").is_dir());
-        }
-
-        #[test]
-        fn fails_if_dir_path_is_blocked_by_file() {
-            let tmp = tempfile::tempdir().unwrap();
-            let project_root = tmp.path();
-
-            // Create a file "src" so "src/app" cannot become a directory
-            File::create(project_root.join("src")).unwrap();
-
-            let dirs = vec![
-                project_root.join("src/app"),
-            ];
-
-            let err = create_directories(&dirs).unwrap_err();
-            assert_eq!(err.0, PomErrorCode::FilesystemDirCreationFail);
-        }
-    }
-
-    mod dir_name_extraction {
-        use super::*;
-
-        #[test]
-        fn extracts_last_component_normal_path() {
-            let p = std::path::Path::new("src/app");
-            let name = get_dir_name(p).unwrap();
-            assert_eq!(name, "app");
-        }
-
-        #[test]
-        fn extracts_last_component_with_trailing_slash() {
-            let p = std::path::Path::new("src/app/");
-            let name = get_dir_name(p).unwrap();
-            assert_eq!(name, "app");
-        }
-
-        #[test]
-        fn fails_on_empty_path() {
-            let p = std::path::Path::new("");
-            let err = get_dir_name(p).unwrap_err();
-            assert_eq!(err.0, PomErrorCode::GenerationLayoutFileInvalidEntryPath);
-        }
-    }
-
-    mod doxygen_groups_generation {
-        use super::*;
-
-        #[test]
-        fn returns_none_when_no_defgroup_and_no_brief() {
-            let entry = GenerationLayoutEntry {
-                path: "src/app".into(),
-                defgroup: None,
-                brief: None,
-                contains_modules: false,
-                module_prefix: None,
-            };
-
-            let group = get_doxygen_group(&entry, "app");
-            assert!(group.is_none());
-        }
-
-        #[test]
-        fn creates_group_when_defgroup_or_brief_present() {
-            let entry = GenerationLayoutEntry {
-                path: "src/app".into(),
-                defgroup: Some("Application Layer".into()),
-                brief: Some("High-level behavior.".into()),
-                contains_modules: false,
-                module_prefix: None,
-            };
-
-            let group = get_doxygen_group(&entry, "app").unwrap();
-            assert_eq!(group.name, "app");
-            assert_eq!(group.defgroup.as_deref(), Some("Application Layer"));
-            assert_eq!(group.brief.as_deref(), Some("High-level behavior."));
-        }
 
         #[test]
         fn group_block_contains_expected_tags() {
@@ -410,102 +299,6 @@ mod tests{
             assert!(contents.contains("@defgroup"));
             assert!(contents.contains("app"));
             assert!(contents.contains("hld"));
-        }
-    }
-
-    mod target_free_files_tests {
-        use super::*;
-
-        fn code_of<T>(r: PomResult<T>) -> PomErrorCode {
-            match r {
-                Ok(_) => panic!("expected Err, got Ok"),
-                Err((code, _)) => code,
-            }
-        }
-
-        #[test]
-        fn core_copies_files_to_project_root() {
-            let tmp = tempfile::tempdir().unwrap();
-            let project_root = tmp.path();
-
-            let src_tmp = tempfile::tempdir().unwrap();
-            let source_dir = src_tmp.path();
-
-            // Create 2 files in source
-            let mut f1 = File::create(source_dir.join(".gitignore")).unwrap();
-            writeln!(f1, "hello").unwrap();
-
-            let mut f2 = File::create(source_dir.join("Doxyfile")).unwrap();
-            writeln!(f2, "world").unwrap();
-
-            let count = copy_target_free_files_core_logic(project_root, source_dir).unwrap();
-            assert_eq!(count, 2);
-
-            assert!(project_root.join(".gitignore").is_file());
-            assert!(project_root.join("Doxyfile").is_file());
-        }
-
-        #[test]
-        fn core_ignores_subdirectories() {
-            let tmp = tempfile::tempdir().unwrap();
-            let project_root = tmp.path();
-
-            let src_tmp = tempfile::tempdir().unwrap();
-            let source_dir = src_tmp.path();
-
-            // file + subdir + file inside subdir
-            File::create(source_dir.join(".clang-format")).unwrap();
-            fs::create_dir_all(source_dir.join("nested")).unwrap();
-            File::create(source_dir.join("nested").join("should_not_copy")).unwrap();
-
-            let count = copy_target_free_files_core_logic(project_root, source_dir).unwrap();
-            assert_eq!(count, 1);
-
-            assert!(project_root.join(".clang-format").is_file());
-            assert!(!project_root.join("nested").exists());
-            assert!(!project_root.join("should_not_copy").exists());
-        }
-
-        #[test]
-        fn core_returns_zero_when_source_is_empty() {
-            let tmp = tempfile::tempdir().unwrap();
-            let project_root = tmp.path();
-
-            let src_tmp = tempfile::tempdir().unwrap();
-            let source_dir = src_tmp.path();
-
-            let count = copy_target_free_files_core_logic(project_root, source_dir).unwrap();
-            assert_eq!(count, 0);
-        }
-
-        #[test]
-        fn core_fails_if_destination_already_exists() {
-            let tmp = tempfile::tempdir().unwrap();
-            let project_root = tmp.path();
-
-            let src_tmp = tempfile::tempdir().unwrap();
-            let source_dir = src_tmp.path();
-
-            // Source has a file named ".gitignore"
-            File::create(source_dir.join(".gitignore")).unwrap();
-
-            // Destination already has ".gitignore"
-            File::create(project_root.join(".gitignore")).unwrap();
-
-            let err = copy_target_free_files_core_logic(project_root, source_dir).unwrap_err();
-            assert_eq!(err.0, PomErrorCode::TargetFreeFilesAlreadyExists);
-        }
-
-        #[test]
-        fn core_fails_when_source_dir_missing() {
-            let tmp = tempfile::tempdir().unwrap();
-            let project_root = tmp.path();
-
-            // A path that does not exist
-            let source_dir = project_root.join("does_not_exist");
-
-            let err = copy_target_free_files_core_logic(project_root, &source_dir).unwrap_err();
-            assert_eq!(err.0, PomErrorCode::TargetFreeFilesSourceReadFail);
         }
     }
 }
