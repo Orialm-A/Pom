@@ -96,10 +96,7 @@ fn create_doc_groups_file(project_root: &Path, groups_list: &[DoxygenGroup]) -> 
         doc_groups_file_content.push_str(&create_group_block(group));
     }
 
-    match write_file(&doc_groups_file_path, &doc_groups_file_content) {
-        Ok(()) => Ok(()),
-        Err(e) => Err(e),
-    }
+    write_file(&doc_groups_file_path, &doc_groups_file_content)
 }
 
 
@@ -116,10 +113,7 @@ fn create_pom_toml_file(project_root: &Path, module_levels_list: &HashMap<String
         )
     )?;
 
-    match write_file(&pom_toml_file_path, &pom_toml_file_content) {
-        Ok(()) => Ok(()),
-        Err(e) => Err(e),
-    }
+    write_file(&pom_toml_file_path, &pom_toml_file_content)
 }
 
 

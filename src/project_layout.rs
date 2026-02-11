@@ -47,7 +47,7 @@ struct TomlOutput { dir: Vec<GenerationLayoutEntry> }
 
 pub fn resolve_project_layout(project_root: &Path) -> PomResult<ResolvedProjectLayout> {
 
-    let generation_layout = read_generation_layout()?;
+    let generation_layout = get_generation_layout()?;
 
     let mut subdirs_list: Vec<PathBuf> = Vec::new();
     // let mut names_list: Vec<String> = Vec::new();
@@ -59,10 +59,7 @@ pub fn resolve_project_layout(project_root: &Path) -> PomResult<ResolvedProjectL
         let subdir_full_path: PathBuf = project_root.join(&generation_layout_entry.path);
 
 
-        let dir_name = match get_dir_name(&subdir_full_path) {
-            Ok(extracted_dir_name) => extracted_dir_name,
-            Err(e) => return Err(e), // Propagate to caller without unpacking
-        };
+        let dir_name = get_dir_name(&subdir_full_path)?;
         // names_list.push(dir_name.to_string());
 
         if let Some(group) = get_doxygen_group(&generation_layout_entry, &dir_name) {
@@ -101,19 +98,19 @@ fn get_dir_name(path: &Path) -> PomResult<&str> {
 }
 
 
-fn read_generation_layout() -> PomResult<Vec<GenerationLayoutEntry>> {
-    let dir_tree_sources: Vec<&str> = vec![
+fn get_generation_layout() -> PomResult<Vec<GenerationLayoutEntry>> {
+    let generation_layout_sources: Vec<&str> = vec![
         // Later: add higher priority config files here
         "assets/default_generation_layout.toml", // Lowest priority
     ];
 
-    let mut dir_tree: Option<TomlOutput> = None;
+    let mut generation_layout: Option<TomlOutput> = None;
 
-    for dir_tree_source in dir_tree_sources {
-        match resolve_dir_tree(dir_tree_source) {
-            Ok(extracted_dir_tree) => {
-                dir_tree = Some(extracted_dir_tree);
-                println!("Start project generation using {}...", dir_tree_source);
+    for generation_layout_source in generation_layout_sources {
+        match get_generation_layout_from_file(generation_layout_source) {
+            Ok(extracted_generation_layout) => {  // Shadowing doesn't work there
+                generation_layout = Some(extracted_generation_layout);
+                println!("Start project generation using {}...", generation_layout_source);
                 break; // stop at first valid source
             }
             Err((PomErrorCode::GenerationLayoutFileCandidateNotFound, _)) => {
@@ -123,42 +120,42 @@ fn read_generation_layout() -> PomResult<Vec<GenerationLayoutEntry>> {
         }
     }
 
-    match dir_tree {
+    match generation_layout {
         None => Err((
             PomErrorCode::GenerationLayoutFileCouldNotFindAny,
             None,
         )),
-        Some(extracted_dir_tree) => Ok(extracted_dir_tree.dir),
+        Some(generation_layout) => Ok(generation_layout.dir),
     }
 }
 
 
-fn resolve_dir_tree(dir_tree_path_str: &str) -> PomResult<TomlOutput> {
+fn get_generation_layout_from_file(generation_layout_file_path: &str) -> PomResult<TomlOutput> {
 
-    let dir_tree_str = match fs::read_to_string(dir_tree_path_str) {
-        Ok(extracted_string) => extracted_string,
+    let generation_layout_str = match fs::read_to_string(generation_layout_file_path) {
+        Ok(generation_layout_str) => generation_layout_str,
         Err(src) => {
             return match src.kind() {
                 ErrorKind::NotFound => Err((PomErrorCode::GenerationLayoutFileCandidateNotFound, None)),
                 _ => Err((
-                    PomErrorCode::GenerationLayoutFileCantRead,
+                    PomErrorCode::GenerationLayoutFileCantOpen,
                     Some(src.to_string())  // `src` type is `Error` which implement `Display`
                 )),
             };
         }
     };
 
-    let dir_tree: TomlOutput = match toml::from_str(&dir_tree_str){
-        Ok(extracted_dir_tree) => { extracted_dir_tree },
+    let generation_layout: TomlOutput = match toml::from_str(&generation_layout_str){
+        Ok(generation_layout) => { generation_layout },
         Err(src) => {
             return Err((
-                PomErrorCode::GenerationLayoutFileCantParse,
+                PomErrorCode::GenerationLayoutFileCantRead,
                 Some(src.to_string())  // `src` type is `Error` which implement `Display`
             ));
         },
     };
 
-    Ok(dir_tree)
+    Ok(generation_layout)
 }
 
 

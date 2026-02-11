@@ -16,11 +16,11 @@ pub enum PomErrorCode {
     PathToProjectRootFailedToCreateRoot = 17,
     // Generation Layout file errors: 2x
     GenerationLayoutFileCandidateNotFound = 20, // Not critical
-    GenerationLayoutFileCantRead = 21,
-    GenerationLayoutFileCantParse = 22,
+    GenerationLayoutFileCantOpen = 21,
+    GenerationLayoutFileCantRead = 22,
     GenerationLayoutFileCouldNotFindAny = 23,
     GenerationLayoutFileInvalidEntryPath = 24,
-    // Filesystem errors: 3x            // refac done
+    // Filesystem errors: 3x
     FilesystemDirCreationFail = 30,
     FilesystemFileCreationFail = 31,
     FilesystemFileWriteFail = 32,
@@ -29,7 +29,7 @@ pub enum PomErrorCode {
     FilesystemUnsupportedEntryType = 35,
     FilesystemCopySourceMissing = 36,
     FilesystemCopySourceNotDir = 37,
-    FilesystemCopyDestExists = 38,
+    FilesystemCopyDestExists = 38,          // Override protection for copy but not write is incoherent. Gotta add an override policy parameter and generalize this error
     FilesystemCopyFail = 39,
     // Prompt errors: 4x
     PromptTargetSelectionFail = 40,
@@ -37,7 +37,7 @@ pub enum PomErrorCode {
     // `pom.toml` file errors: 5x
     PomTomlFileSerializationFail = 50,
     // Assets errors: 6x
-    FileTemplateMissing = 70,  // Did not find expected files in default assets
+    FileTemplateMissing = 60,
 
 }
 
@@ -48,28 +48,45 @@ impl PomErrorCode {
 
     const fn error_message(self) -> &'static str {
         match self {
-            // Path to project root errors: 1x
-            PomErrorCode::PathToProjectRootEmpty => "Project path is empty or whitespace.",
-            PomErrorCode::PathToProjectRootInPomSource => "Refusing to use this path as project root because it looks like Pom's source directory. Did you export `POM_DEV_TEST_PROJECT` correctly?",
-            PomErrorCode::PathToProjectRootCantGetCurrentDir => "Could not get current directory.",
-            PomErrorCode::PathToProjectRootEnvVarNotUnicode => "Tried to create debug project in env var `POM_DEV_TEST_PROJECT` but the OS detected non-unicode characters.",
-            PomErrorCode::PathToProjectRootNotEmpty => "Tried to create the project directory but it already exists and is not empty.",
-            PomErrorCode::PathToProjectRootFailedToReadDir => "The specified project path exists but can't be read to check if it is empty.",
-            PomErrorCode::PathToProjectRootExistsAndNotDir => "The specified project path exists but is a file.",
-            PomErrorCode::PathToProjectRootFailedToCreateRoot => "Failed to create the project directory for OS reasons.",
-            // Config files errors: 2x
-            PomErrorCode::GenerationLayoutFileCantRead => "Found a generation layout file but failed to read it.",
-            PomErrorCode::GenerationLayoutFileCantParse => "Found a dir tree config file but failed to parse it.",
-            PomErrorCode::GenerationLayoutFileCouldNotFindAny => "Did not found any dir tree config file.",
-            PomErrorCode::GenerationLayoutFileInvalidEntryPath => "The field `path` of a generation layout entry is invalid, failed to extract its name.",
-            // subdirectories errors: 3x
-            PomErrorCode::FilesystemDirCreationFail => "Failed to create a subdir for the project.",
-            // `pom.toml` file errors: 5x
-            PomErrorCode::PomTomlFileSerializationFail => "Failed to serialize project settings for `pom.toml`",
-            // Target files errors: 7x
-            PomErrorCode::PromptTargetSelectionFail => "An error occured when selecting the target.",
-            // Non fatal errors fallback
-            _ => "Internal: missing config source was handled as fatal. This is a Pom bug.",
+            Self::PathToProjectRootEmpty => "Project path is empty or whitespace.",
+            Self::PathToProjectRootInPomSource => "Project path is in Pom's source directory. Export `POM_DEV_TEST_PROJECT`.",
+            Self::PathToProjectRootCantGetCurrentDir => "Could not get the current directory.",
+            Self::PathToProjectRootEnvVarNotUnicode => "Env var `POM_DEV_TEST_PROJECT` contains non-Unicode characters.",
+            Self::PathToProjectRootNotEmpty => "Project path already exists and is not empty.",
+            Self::PathToProjectRootFailedToReadDir => "Project path already exists but could not be read.",
+            Self::PathToProjectRootExistsAndNotDir => "Project path already exists but is not a directory.",
+            Self::PathToProjectRootFailedToCreateRoot => "Failed to create the project root due to an OS error.",
+
+            // Generation layout file errors
+            Self::GenerationLayoutFileCantOpen => "Generation layout file was found but could not be opened.",
+            Self::GenerationLayoutFileCantRead => "Generation layout file was found but could not be read.",
+            Self::GenerationLayoutFileCouldNotFindAny => "Generation layout file was not found.",
+            Self::GenerationLayoutFileInvalidEntryPath => "Generation layout file has an invalid `path` field.",
+
+            // Filesystem errors
+            Self::FilesystemDirCreationFail => "Failed to create directory.",
+            Self::FilesystemFileCreationFail => "Failed to create file.",
+            Self::FilesystemFileWriteFail => "Failed to write file.",
+            Self::FilesystemEntryInvalid => "Invalid directory entry found.",
+            Self::FilesystemStripPathPrefixFail => "Failed to strip path prefix.",
+            Self::FilesystemUnsupportedEntryType => "Unsupported filesystem entry type found.",
+            Self::FilesystemCopySourceMissing => "Copy source is missing.",
+            Self::FilesystemCopySourceNotDir => "Copy source is not a directory.",
+            Self::FilesystemCopyDestExists => "Copy destination already exists.",
+            Self::FilesystemCopyFail => "Copy failed.",
+
+            // Prompt errors
+            Self::PromptTargetSelectionFail => "Failed to prompt for target selection.",
+            Self::PromptStringFail => "Failed to prompt for input.",
+
+            // pom.toml
+            Self::PomTomlFileSerializationFail => "Failed to serialize `pom.toml` content.",
+
+            // Templates/assets
+            Self::FileTemplateMissing => "File templates are missing from the default assets.",
+
+            // Fallback
+            _ => "Internal: A non-critical error was handled as fatal. This is a Pom bug.",
 
         }
     }
