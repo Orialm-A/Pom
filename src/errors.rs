@@ -1,9 +1,20 @@
+//! Errors module
+//!
+//! This module centralize all the possible error codes and the handler.
+//! Errors can be escalated up to `main()` where they'll be displayed and trigger `std::process::exit`.
+//! They cal also be catched anywhere before `main()`.
+
 use owo_colors::OwoColorize;
 
+/// Return type for functions
+///
+/// Allows to return either a result of any type (`<T>`), or an error tuple containing a `PomErrorCode` and
+/// an optional String for details.
 pub type PomResult<T> = Result<T, (PomErrorCode, Option<String>)>;
 
 #[repr(i32)]  // `u8` more pertinent but would need a cast for `std::process::exit(code: i32)`
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Represents all the error codes
 pub enum PomErrorCode {
     // Path to project root errors: 1x
     PathToProjectRootEmpty = 10,
@@ -91,6 +102,10 @@ impl PomErrorCode {
         }
     }
 
+    /// Final error handler
+    ///
+    /// Will print the base error message, and the option details if received.
+    /// Exit the program.
     pub fn handler(self, src: Option<&str>) -> ! {
         eprintln!(
             "{}: {}",

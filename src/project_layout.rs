@@ -1,3 +1,8 @@
+//! Project Layout module
+//!
+//! This module is responsible for accessing the project layout file and extracting/formating all the
+//! pertinent info to create a project
+
 use serde::Deserialize;
 use std::fs;
 use crate::errors::{PomErrorCode, PomResult};
@@ -20,6 +25,7 @@ struct GenerationLayoutEntry {
 
 
 #[derive(Debug)]
+/// Describe a Doxygen group to generate `doc_groups.h`
 pub struct DoxygenGroup {
     pub name: String,
     pub defgroup: Option<String>,
@@ -28,12 +34,14 @@ pub struct DoxygenGroup {
 
 
 #[derive(Debug, Clone, Serialize)]
+/// Describe a module specs for `pom module create`
 pub struct ModuleLevelSpec {
     pub path: String, // Store paths relatively to project root to ensure portability across different computers (`git clone`)
     pub prefix: Option<String>,
 }
 
 
+/// Represents the data extracted from the project layout
 pub struct ResolvedProjectLayout {
     pub dirs: Vec<PathBuf>,
     pub doxygen_groups: Vec<DoxygenGroup>,
@@ -45,6 +53,7 @@ pub struct ResolvedProjectLayout {
 struct TomlOutput { dir: Vec<GenerationLayoutEntry> }
 
 
+/// Resolve project layout for project creation
 pub fn resolve_project_layout(project_root: &Path) -> PomResult<ResolvedProjectLayout> {
 
     let generation_layout = get_generation_layout()?;
