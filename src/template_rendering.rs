@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::path::{PathBuf, Path};
 use regex::Regex;
+use once_cell::sync::Lazy;
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -67,15 +68,18 @@ pub fn render_template(template_content: &str, fields: &TemplateFields) -> Strin
     // instead of numbers. Using it there is overzealous but that's a simple case so perfect
     // example
 
-    let regular_expression = Regex::new(r"(?x) # extended mode: Ignores whitespace / allow comments
-                                        \{\{pom:  # Start of the pattern identification
-                                        (?P<field_name>[a-zA-Z_]+) # What must be extracted
-                                        \}\}      # End of the the pattern identification
-    ").unwrap();
+    static TEMPLATE_RE: Lazy<Regex> = Lazy::new(|| {Regex::new( // This prevent recompiling in loop
+        r"(?x) # extended mode: Ignores whitespace / allow comments
+        \{\{pom:  # Start of the pattern identification
+        (?P<field_name>[a-zA-Z][a-zA-Z_]*) # What must be extracted
+        \}\}      # End of the the pattern identification
+        ").unwrap()
+    });
+
     // Returns Result<Regex, regex::Error>. The expression is hardcoded and without user input, so
     // no need to catch the `regex::Error` to fire a `PomErrorCode`. I see issues at compile time.
 
-    regular_expression.replace_all(template_content, |captured: &regex::Captures| {
+    TEMPLATE_RE.replace_all(template_content, |captured: &regex::Captures| {
         let key = &captured["field_name"];
         fields.get_by_str(key)
         .map(|s| s.to_owned())
