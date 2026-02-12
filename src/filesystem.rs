@@ -8,6 +8,7 @@ use crate::errors::{PomErrorCode, PomResult};
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use walkdir::WalkDir;
+use crate::template_rendering::{get_rendered_template_dest, render_template, TemplateFields};
 
 
 
@@ -115,7 +116,7 @@ pub enum ExistingFilePolicy {
 pub enum CopyPolicy {
     PlainFilesOnly,
     RenderedFilesOnly,
-    // Both
+    Both
 }
 
 
@@ -194,7 +195,7 @@ pub fn validate_dir_entry(entry: Result<walkdir::DirEntry, walkdir::Error>, sour
 ///
 /// Create required sub directories to respect the source file tree
 /// May error `PomErrorCode::FilesystemFileOverwriteForbidded` or `FilesystemCopyFail`
-pub fn copy_files(source_root: &Path, destination_root: &Path, existing_file_policy: ExistingFilePolicy, copy_policy: CopyPolicy) -> PomResult<usize> {
+pub fn copy_files(source_root: &Path, destination_root: &Path, existing_file_policy: ExistingFilePolicy, copy_policy: CopyPolicy, fields: &Option<TemplateFields>) -> PomResult<usize> {
     if !source_root.exists() {
         return Err((
             PomErrorCode::FilesystemCopySourceMissing,
@@ -242,9 +243,15 @@ pub fn copy_files(source_root: &Path, destination_root: &Path, existing_file_pol
                     }
                 }
 
-                if let Some(_rendered_destination_path) = get_rendered_template(&destination_path){
+                if let Some(rendered_destination_path) = get_rendered_template_dest(&destination_path){
                     if copy_policy != CopyPolicy::PlainFilesOnly {
-                        // copy_count+= create_rendered_file(&entry_full_path, &rendered_destination_path)?;  // Not implemented yet
+                        if let Some(extracted_fields) = fields {
+                            copy_count+= copy_with_rendering_helper(&entry_full_path,
+                                                                    &rendered_destination_path,
+                                                                    extracted_fields,
+                                                                    &existing_file_policy
+                                                                    )?;
+                        }
                     }
                 } else if copy_policy != CopyPolicy::RenderedFilesOnly {
                     copy_count += plain_copy_helper(&entry_full_path, &destination_path)?;
@@ -270,30 +277,35 @@ fn plain_copy_helper(entry_path: &Path, destination_path: &Path) -> PomResult<us
 }
 
 
+fn copy_with_rendering_helper(
+    entry_path: &Path,
+    destination_path: &Path,
+    fields: &TemplateFields,
+    existing_file_policy: &ExistingFilePolicy
+) -> PomResult<usize> {
+    let template_content = match std::fs::read_to_string(entry_path) {
+        Ok(template_content) => template_content,
+        Err(src) => { return Err((
+            PomErrorCode::FilesystemFileReadFail,
+            Some(format!("{}: {}", entry_path.display(), src))
+        ));},
+    };
 
-fn get_rendered_template(template_path: &Path) -> Option<PathBuf> {
-    // Check extension
-    if template_path.extension()? != "pomrt" {
-        return None;
-    }
+    let rendered_content = render_template(&template_content, fields);
 
-    // Remove the `.pomtpl` extension
-    let mut stripped = template_path.to_path_buf();
-    stripped.set_extension("");
+    write_file(destination_path, &rendered_content, existing_file_policy)?;
 
-    Some(stripped)
+    Ok(1)
 }
-
-
 
 
 /// Write a file
 ///
 /// Override if it exists
 /// May error `PomErrorCode::FilesystemFileCreationFail`, `FilesystemFileWriteFail` or `FilesystemFileOverwriteForbidded`
-pub fn write_file(file_path: &Path, file_content: &str, existing_file_policy: ExistingFilePolicy)  -> PomResult<()>  {
+pub fn write_file(file_path: &Path, file_content: &str, existing_file_policy: &ExistingFilePolicy)  -> PomResult<()>  {
     if file_path.exists() {
-        if existing_file_policy == ExistingFilePolicy::Fail {
+        if *existing_file_policy == ExistingFilePolicy::Fail {
             return Err((
                 PomErrorCode::FilesystemFileOverwriteForbidded,
                 Some(format!("`{}` already exists.", file_path.display())),

@@ -6,6 +6,7 @@ use crate::errors::{PomErrorCode, PomResult};
 use crate::filesystem::{create_directories, copy_files, write_file, ExistingFilePolicy, CopyPolicy};
 use crate::cli::resolution::{resolve_project_name, resolve_project_target, resolve_project_root};
 use crate::project_layout::{resolve_project_layout, DoxygenGroup, ModuleLevelSpec};
+use crate::template_rendering::{TemplateFields, FieldKey};
 
 
 #[derive(Debug, Serialize)]
@@ -24,10 +25,14 @@ pub fn project_create(
 
     // Resolve user parameters
     let project_root = resolve_project_root(project_root_parameter)?;
-    let (_project_name, project_name_normalized) = resolve_project_name(project_name_parameter)?;
+    let (project_name, project_name_normalized) = resolve_project_name(project_name_parameter)?;
     let project_root = project_root.join(&project_name_normalized);
 
     let project_target = resolve_project_target(project_target_parameter)?;
+
+    let mut rendering_fields = TemplateFields::new();
+    rendering_fields.insert(FieldKey::ProjectName, project_name);
+    rendering_fields.insert(FieldKey::ProjectNameNormalized, project_name_normalized);
 
     // Resolve project layout
     let resolved_project_layout = resolve_project_layout(&project_root)?;
@@ -49,7 +54,7 @@ pub fn project_create(
     if !dry_run { copy_target_free_files(&project_root)?; }
 
     println!("Create target-specific files...");
-    if !dry_run { copy_files(&project_target, &project_root, ExistingFilePolicy::Fail, CopyPolicy::PlainFilesOnly)?; }
+    if !dry_run { copy_files(&project_target, &project_root, ExistingFilePolicy::Fail, CopyPolicy::Both, &Some(rendering_fields))?; }
 
     Ok(())
 }
@@ -96,7 +101,7 @@ fn create_doc_groups_file(project_root: &Path, groups_list: &[DoxygenGroup]) -> 
         doc_groups_file_content.push_str(&create_group_block(group));
     }
 
-    write_file(&doc_groups_file_path, &doc_groups_file_content, ExistingFilePolicy::Fail)
+    write_file(&doc_groups_file_path, &doc_groups_file_content, &ExistingFilePolicy::Fail)
 }
 
 
@@ -113,7 +118,7 @@ fn create_pom_toml_file(project_root: &Path, module_levels_list: &HashMap<String
         )
     )?;
 
-    write_file(&pom_toml_file_path, &pom_toml_file_content, ExistingFilePolicy::Fail)
+    write_file(&pom_toml_file_path, &pom_toml_file_content, &ExistingFilePolicy::Fail)
 }
 
 
@@ -159,7 +164,7 @@ fn copy_target_free_files(project_root: &Path) -> PomResult<()> {
             }
         }
 
-        match copy_files(&source_path, &project_root, ExistingFilePolicy::Fail, CopyPolicy::PlainFilesOnly) {
+        match copy_files(&source_path, &project_root, ExistingFilePolicy::Fail, CopyPolicy::PlainFilesOnly, &None) {
             Ok(file_count) => {
                 if file_count == 0 {
                     if files_source == default_source {
