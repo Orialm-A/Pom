@@ -112,14 +112,6 @@ pub enum ExistingFilePolicy {
 }
 
 
-#[derive(PartialEq)]
-pub enum CopyPolicy {
-    PlainFilesOnly,
-    RenderedFilesOnly,
-    Both
-}
-
-
 /// Create directories passed by reference
 ///
 /// Existing directories are ignored
@@ -195,7 +187,7 @@ pub fn validate_dir_entry(entry: Result<walkdir::DirEntry, walkdir::Error>, sour
 ///
 /// Create required sub directories to respect the source file tree
 /// May error `PomErrorCode::FilesystemFileOverwriteForbidded` or `FilesystemCopyFail`
-pub fn copy_files(source_root: &Path, destination_root: &Path, existing_file_policy: ExistingFilePolicy, copy_policy: CopyPolicy, fields: &Option<TemplateFields>) -> PomResult<usize> {
+pub fn copy_files(source_root: &Path, destination_root: &Path, existing_file_policy: ExistingFilePolicy, fields: &Option<TemplateFields>) -> PomResult<usize> {
     if !source_root.exists() {
         return Err((
             PomErrorCode::FilesystemCopySourceMissing,
@@ -244,16 +236,14 @@ pub fn copy_files(source_root: &Path, destination_root: &Path, existing_file_pol
                 }
 
                 if let Some(rendered_destination_path) = get_rendered_template_dest(&destination_path){
-                    if copy_policy != CopyPolicy::PlainFilesOnly {
-                        if let Some(extracted_fields) = fields {
-                            copy_count+= copy_with_rendering_helper(&entry_full_path,
-                                                                    &rendered_destination_path,
-                                                                    extracted_fields,
-                                                                    &existing_file_policy
-                                                                    )?;
-                        }
+                    if let Some(extracted_fields) = fields {
+                        copy_count+= copy_with_rendering_helper(&entry_full_path,
+                                                                &rendered_destination_path,
+                                                                extracted_fields,
+                                                                &existing_file_policy
+                                                                )?;
                     }
-                } else if copy_policy != CopyPolicy::RenderedFilesOnly {
+                } else {
                     copy_count += plain_copy_helper(&entry_full_path, &destination_path)?;
                 }
             },

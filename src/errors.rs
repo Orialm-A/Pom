@@ -50,7 +50,6 @@ pub enum PomErrorCode {
     PomTomlFileSerializationFail = 50,
     // Assets errors: 6x
     FileTemplateMissing = 60,
-
 }
 
 impl PomErrorCode {
@@ -79,6 +78,7 @@ impl PomErrorCode {
             Self::FilesystemDirCreationFail => "Failed to create directory.",
             Self::FilesystemFileCreationFail => "Failed to create file.",
             Self::FilesystemFileWriteFail => "Failed to write file.",
+            Self::FilesystemFileReadFail => "Failed to read file.",
             Self::FilesystemEntryInvalid => "Invalid directory entry found.",
             Self::FilesystemStripPathPrefixFail => "Failed to strip path prefix.",
             Self::FilesystemUnsupportedEntryType => "Unsupported filesystem entry type found.",
