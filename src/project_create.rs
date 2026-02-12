@@ -1,178 +1,62 @@
-use std::env;
 use std::path::{PathBuf, Path};
-use crate::errors::{PomErrorCode, PomResult};
-use crate::prompt::{prompt_if_missing_string, slugify_snake};
-use std::fs;
-use crate::read_config_files::{read_generation_layout, GenerationLayoutEntry};
-use convert_case::{Case, Casing};
-use std::fs::File;
-use std::io::prelude::*;
 use std::collections::HashMap;
 use serde::Serialize;
 
+use crate::errors::{PomErrorCode, PomResult};
+use crate::filesystem::{create_directories, copy_files, write_file, ExistingFilePolicy};
+use crate::cli::resolution::{resolve_project_name, resolve_project_target, resolve_project_root};
+use crate::project_layout::{resolve_project_layout, DoxygenGroup, ModuleLevelSpec};
+use crate::template_rendering::{TemplateFields, FieldKey};
 
-
-#[derive(Debug)]
-struct DoxygenGroup {
-    name: String,
-    defgroup: Option<String>,
-    brief: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct ModuleLevelSpec {
-    pub path: String, // Store paths relatively to project root to ensure portability across different computers (`git clone`)
-    pub prefix: Option<String>,
-}
-
-struct ResolvedProjectLayout {
-    dirs: Vec<PathBuf>,
-    names: Vec<String>,
-    doxygen_groups: Vec<DoxygenGroup>,
-    module_levels: HashMap<String, ModuleLevelSpec>,
-}
 
 #[derive(Debug, Serialize)]
-pub struct PomToml<'a> {
+struct PomToml<'a> {
     pub levels: &'a HashMap<String, ModuleLevelSpec>,
     // Add other project data to save here
 }
 
 
-
 pub fn project_create(
-    // The project name passed in the CLI
     project_name_parameter: Option<String>,
-    // The path where to create the project passed in the CLI
     project_root_parameter: Option<PathBuf>,
-    // Print what would be done without creating / modifying files
+    project_target_parameter: Option<String>,
     dry_run: bool
-) {
+) -> PomResult<()> {
 
-    let generation_layout = match read_generation_layout() {
-        Ok(extracted_generation_layout) => {extracted_generation_layout},
-        Err((error_code, src)) => { error_code.handler(src.as_deref()); }
-    };
-
-    let project_root = match get_project_root(project_root_parameter) {
-        Ok(extracted_project_root) => { extracted_project_root },
-        Err((error_code, src)) => { error_code.handler(src.as_deref()); }
-    };
-
-    match validate_project_root(&project_root) {
-        Ok(()) => {},
-        Err((error_code, src)) => { error_code.handler(src.as_deref()); }
-    };
-
-    let (project_name, project_name_normalized) = get_project_name(project_name_parameter);
-
+    // Resolve user parameters
+    let project_root = resolve_project_root(project_root_parameter)?;
+    let (project_name, project_name_normalized) = resolve_project_name(project_name_parameter)?;
     let project_root = project_root.join(&project_name_normalized);
 
-    println!(
-        "Generate project directory `{}`...",
-        project_root.display()
-    );
+    let project_target = resolve_project_target(project_target_parameter)?;
 
-    if !dry_run {
-        match create_root_dir(&project_root) {
-            Ok(()) => {},
-            Err((error_code, src)) => {error_code.handler(src.as_deref()); }
-        }
-    }
+    let mut rendering_fields = TemplateFields::new();
+    rendering_fields.insert(FieldKey::ProjectName, project_name);
+    rendering_fields.insert(FieldKey::ProjectNameNormalized, project_name_normalized);
 
-    let resolved_project_layout = match resolve_project_layout(&project_root, &generation_layout) {
-        Ok(extracted_resolved_project_layout) => { extracted_resolved_project_layout },
-        Err((error_code, src)) => { error_code.handler(src.as_deref()); }
-    };
+    // Resolve project layout
+    let resolved_project_layout = resolve_project_layout(&project_root)?;
 
-    println!("Generate subdirectories...");
-    if !dry_run {
-        match create_sub_dirs(&resolved_project_layout.dirs) {
-            Ok(()) => {},
-            Err((error_code, src)) => {error_code.handler(src.as_deref()); }
-        }
-    }
+    // Action
+    println!("Create project directory at `{}`...", project_root.display());
+    if !dry_run { create_root_dir(&project_root)?; }
 
-    println!("Generate `doc_groups.h`...");
-    if !dry_run {
-        match generate_doc_groups_file(&project_root, &resolved_project_layout.doxygen_groups) {
-            Ok(()) => {},
-            Err((error_code, src)) => {error_code.handler(src.as_deref()); }
-        }
-    }
+    println!("Create subdirectories...");
+    if !dry_run { create_directories(&resolved_project_layout.dirs)?; }
 
-    println!("Generate `pom.toml`...");
-    if !dry_run {
-        match generate_pom_toml_file(&project_root, &resolved_project_layout.module_levels) {
-            Ok(()) => {},
-            Err((error_code, src)) => {error_code.handler(src.as_deref()); }
-        }
-    }
+    println!("Create `doc_groups.h`...");
+    if !dry_run { create_doc_groups_file(&project_root, &resolved_project_layout.doxygen_groups)?; }
 
-    println!("Generate target-free files...");
-    if !dry_run {
-        match copy_target_free_files(&project_root) {
-            Ok(()) => {},
-            Err((error_code, src)) => {error_code.handler(src.as_deref()); }
-        }
-    }
-}
+    println!("Create `pom.toml`...");
+    if !dry_run { create_pom_toml_file(&project_root, &resolved_project_layout.module_levels)?;}
 
+    println!("Create target-free files...");
+    if !dry_run { copy_target_free_files(&project_root)?; }
 
-fn get_project_root(project_root_parameter: Option<PathBuf>) -> PomResult<PathBuf> {
-    // Path in environment variable is tested first to return early (dev highest priority)
-    match env::var("POM_DEV_TEST_PROJECT") {
-        Ok(project_root) => return Ok(PathBuf::from(project_root)),
-        Err(env::VarError::NotPresent) => {},
-        Err(env::VarError::NotUnicode(src)) => {
-            let details = format!("{:?}", src);  // `OsString`. Doesn't implement `Display`
-            return Err((
-                PomErrorCode::PathToProjectRootEnvVarNotUnicode,
-                Some(details),
-            ));
-        },
-    };
-
-    // Parameter is tested before local directory to return early ensure user input priority
-    match project_root_parameter {
-        Some(project_root) => return Ok(project_root),
-        None => {},
-    };
-
-    // Current directory fallback
-    match env::current_dir() {
-        Ok(project_root) => Ok(project_root),
-        Err(src) => {
-            Err((PomErrorCode::PathToProjectRootCantGetCurrentDir, Some(src.to_string())))
-        },
-    }
-}
-
-
-fn validate_project_root(project_root: &Path) -> PomResult<()> {
-    let stringified_project_root = project_root.as_os_str().to_string_lossy();
-
-    if stringified_project_root.trim().is_empty() {
-        return Err((PomErrorCode::PathToProjectRootEmpty, None));
-    }
-
-    let marker = project_root.join("pom_source_safeguard.txt");
-    if marker.is_file() {
-        return Err((PomErrorCode::PathToProjectRootInPomSource, None));
-    }
+    println!("Create target-specific files...");
+    if !dry_run { copy_files(&project_target, &project_root, ExistingFilePolicy::Fail, &Some(rendering_fields))?; }
 
     Ok(())
-}
-
-
-fn get_project_name(project_name_parameter: Option<String>) -> (String, String) {
-    // `project_name` is to be used in documents read by humans, like README.md
-    let project_name = prompt_if_missing_string(project_name_parameter, "Project name");
-
-    // `project_name_normalized` is to be used in paths
-    let project_name_normalized = slugify_snake(&project_name);
-
-    (project_name, project_name_normalized)
 }
 
 
@@ -200,125 +84,28 @@ fn create_root_dir(project_root: &Path) -> PomResult<()> {  // `PathBuf` owns me
         }
     }
 
-    match fs::create_dir_all(project_root) {
+    match create_directories(project_root) {
         Ok(()) => Ok(()),
-        Err(src) => {
-            let details = format!("{:?}", src);
-            Err((PomErrorCode::PathToProjectRootFailedToCreateRoot, Some(details)))
+        Err((_, src)) => {
+            Err((PomErrorCode::PathToProjectRootFailedToCreateRoot, src))
         }
     }
 }
 
 
-fn resolve_project_layout(project_root: &Path, generation_layout: &[GenerationLayoutEntry]) -> PomResult<ResolvedProjectLayout> {
-
-    let mut subdirs_list: Vec<PathBuf> = Vec::new();
-    let mut names_list: Vec<String> = Vec::new();
-    let mut doxygen_groups_list: Vec<DoxygenGroup> = Vec::new();
-    let mut module_levels_map: HashMap<String, ModuleLevelSpec> = HashMap::new();
-
-    for generation_layout_entry in generation_layout {
-
-        let subdir_full_path: PathBuf = project_root.join(&generation_layout_entry.path);
-
-
-        let dir_name = match get_dir_name(&subdir_full_path) {
-            Ok(extracted_dir_name) => extracted_dir_name,
-            Err(e) => return Err(e), // Propagate to caller without unpacking
-        };
-        names_list.push(dir_name.to_string());
-
-        if let Some(group) = get_doxygen_group(&generation_layout_entry, &dir_name) {
-            doxygen_groups_list.push(group);
-        }
-
-        if let Some(module_level_spec) = get_module_level_spec(&generation_layout_entry) {
-            module_levels_map.insert(dir_name.to_string(), module_level_spec);
-        }
-
-        subdirs_list.push(subdir_full_path);
-    }
-
-    Ok( ResolvedProjectLayout{
-        dirs: subdirs_list,
-        names: names_list,
-        doxygen_groups: doxygen_groups_list,
-        module_levels: module_levels_map,
-    })
-}
-
-
-fn create_sub_dirs(dirs_path_list: &[PathBuf]) -> PomResult<()> {
-    for subdir_path in dirs_path_list {
-        match fs::create_dir_all(subdir_path) {
-            Ok(()) => { continue },
-            Err(src) => {
-                return Err((
-                    PomErrorCode::SubDirsCreationFail,
-                    Some(format!("{}: {}", subdir_path.display(), src))
-                ));
-            }
-        };
-    }
-    Ok(())
-}
-
-
-fn get_dir_name(path: &Path) -> PomResult<&str> {
-    let dir_name_opt = path
-        .components()
-        .last()
-        .and_then(|c| c.as_os_str().to_str());
-
-    match dir_name_opt {
-        Some(dir_name) if !dir_name.is_empty() => Ok(dir_name),
-        _ => Err((
-            PomErrorCode::GenerationLayoutFileInvalidEntryPath,
-            Some(format!("Invalid directory path: `{}`.", path.display())),
-        )),
-    }
-}
-
-
-fn get_doxygen_group(dir: &GenerationLayoutEntry, dir_name: &str) -> Option<DoxygenGroup> {
-    if dir.defgroup.is_none() && dir.brief.is_none() {
-        return None;
-    }
-
-    Some(DoxygenGroup {
-        name: dir_name.to_string().to_case(Case::Snake),
-        defgroup: dir.defgroup.clone(),
-        brief: dir.brief.clone(),
-    })
-}
-
-
-fn get_module_level_spec(generation_layout_entry: &GenerationLayoutEntry) -> Option<ModuleLevelSpec> {
-    if generation_layout_entry.contains_modules {
-        Some(ModuleLevelSpec {
-            path: generation_layout_entry.path.to_string(),
-            prefix: generation_layout_entry.module_prefix.clone(),
-        })
-    } else { None }
-}
-
-
-fn generate_doc_groups_file(project_root: &Path, groups_list: &[DoxygenGroup]) -> PomResult<()> {
+fn create_doc_groups_file(project_root: &Path, groups_list: &[DoxygenGroup]) -> PomResult<()> {
     let doc_groups_file_path = project_root.join("doc_groups.h");
 
     let mut doc_groups_file_content = String::new();
     for group in groups_list {
-        doc_groups_file_content.push_str(&generate_group_block(group));
+        doc_groups_file_content.push_str(&create_group_block(group));
     }
 
-    match write_file(&doc_groups_file_path, &doc_groups_file_content) {
-        Ok(()) => Ok(()),
-        Err(e) => Err(e),
-    }
+    write_file(&doc_groups_file_path, &doc_groups_file_content, &ExistingFilePolicy::Fail)
 }
 
 
-fn generate_pom_toml_file(project_root: &Path, module_levels_list: &HashMap<String, ModuleLevelSpec>) -> PomResult<()> {
+fn create_pom_toml_file(project_root: &Path, module_levels_list: &HashMap<String, ModuleLevelSpec>) -> PomResult<()> {
     let pom_toml_file_path = project_root.join("pom.toml");
 
     let pom_toml = PomToml {
@@ -331,37 +118,11 @@ fn generate_pom_toml_file(project_root: &Path, module_levels_list: &HashMap<Stri
         )
     )?;
 
-    match write_file(&pom_toml_file_path, &pom_toml_file_content) {
-        Ok(()) => Ok(()),
-        Err(e) => Err(e),
-    }
+    write_file(&pom_toml_file_path, &pom_toml_file_content, &ExistingFilePolicy::Fail)
 }
 
 
-fn write_file(file_path: &Path, file_content: &str)  -> PomResult<()>  {
-    let mut file = match File::create_new(file_path) {
-        Ok(f) => f,
-        Err(src) => {
-            return Err((
-                PomErrorCode::FileCreationFail,
-                Some(src.to_string()),
-            ));
-        }
-    };
-
-    match file.write_all(file_content.as_bytes()){
-        Ok(()) => { Ok(()) }
-        Err(src) => {
-            Err((
-                PomErrorCode::FileWriteFail,
-                Some(src.to_string()),
-            ))
-        }
-    }
-}
-
-
-fn generate_group_block(group: &DoxygenGroup) -> String {
+fn create_group_block(group: &DoxygenGroup) -> String {
     let mut group_block = String::new();
     group_block.push_str("/**\n");
     let id = &group.name;
@@ -396,17 +157,23 @@ fn copy_target_free_files(project_root: &Path) -> PomResult<()> {
 
         if !source_path.exists() {
             if files_source == default_source {
-                return Err((PomErrorCode::TargetFreeFilesDefaultSourceMissing, None));
+                return Err((
+                    PomErrorCode::FileTemplateMissing,
+                    Some(format!("In `{}`", files_source)),
+                ));
             }
         }
 
-        match copy_target_free_files_core_logic(project_root, source_path) {
+        match copy_files(&source_path, &project_root, ExistingFilePolicy::Fail, &None) {
             Ok(file_count) => {
                 if file_count == 0 {
                     if files_source == default_source {
                     // Should never get here!
                     // If no file has been copied from the default source, it means `assets/target_free` is empty: The repository has an issue, or the build output has an issue.
-                    return Err((PomErrorCode::TargetFreeFilesDefaultSourceEmpty, None));
+                    return Err((
+                        PomErrorCode::FileTemplateMissing,
+                        Some(format!("In `{}`", files_source)),
+                    ));
                     } else {
                         continue;  // High priority empty, fall back to lower
                     }
@@ -420,69 +187,12 @@ fn copy_target_free_files(project_root: &Path) -> PomResult<()> {
     Ok(())
 }
 
-fn copy_target_free_files_core_logic(project_root: &Path, source_path: &Path) -> PomResult<usize> {
-    let mut file_count: usize = 0;
-    let entries =  match fs::read_dir(source_path) {
-        Ok(extracted_entries) => extracted_entries,
-        Err(src) => {
-            return Err((
-                PomErrorCode::TargetFreeFilesSourceReadFail,
-                Some(src.to_string()),
-            ))
-        }
-    };
-
-    for entry in entries {
-        let entry = match entry {  // Shadowing
-            Ok(entry) => entry,  // Double shadowing! :0
-            Err(src) => {
-                return Err((
-                    PomErrorCode::TargetFreeFilesInvalidEntry,
-                    Some(src.to_string()),
-                ));
-            }
-        };
-
-        let entry_path = entry.path();
-
-        if !entry_path.is_file() {
-            continue;  // Only copy files, ignore subdirs
-        }
-
-        let file_name = match entry_path.file_name() {
-            Some(file_name) => file_name,
-            None => continue,  // Can't happen with default files
-        };
-
-        let destination_path = project_root.join(file_name);
-
-        if destination_path.exists() {
-            return Err((
-                PomErrorCode::TargetFreeFilesAlreadyExists,
-                Some(format!("`{}` already exists.", destination_path.display())),
-            ));
-        }
-
-        match fs::copy(&entry_path, &destination_path) {
-            Ok(_) => { file_count += 1; }
-            Err(src) => {
-                return Err((
-                    PomErrorCode::TargetFreeFilesCopyFail,
-                    Some(format!("{}: {}", entry_path.display(), src))
-                ));
-            }
-        }
-    }
-
-    Ok(file_count)
-}
 
 #[cfg(test)]
 mod tests{
     use super::*;
     use std::fs::{self, File};
-    use std::path::Path;
-    use std::io::{Read, Write};
+    use std::io::Read;
 
 
     mod root_creation {
@@ -544,118 +254,8 @@ mod tests{
     }
 
 
-    mod subdirs_creation {
+    mod doxygen_file_creation {
         use super::*;
-
-        #[test]
-        fn creates_dirs_when_missing() {
-            let tmp = tempfile::tempdir().unwrap();
-            let project_root = tmp.path();
-
-            let dirs = vec![
-                project_root.join("src/app"),
-                project_root.join("resources/doc"),
-            ];
-
-            create_sub_dirs(&dirs).unwrap();
-
-            assert!(project_root.join("src").is_dir());
-            assert!(project_root.join("src/app").is_dir());
-            assert!(project_root.join("resources/doc").is_dir());
-        }
-
-        #[test]
-        fn succeeds_if_dirs_already_exist() {
-            let tmp = tempfile::tempdir().unwrap();
-            let project_root = tmp.path();
-
-            fs::create_dir_all(project_root.join("src/app")).unwrap();
-
-            let dirs = vec![
-                project_root.join("src/app"),
-                project_root.join("resources/doc"),
-            ];
-
-            create_sub_dirs(&dirs).unwrap();
-
-            assert!(project_root.join("src/app").is_dir());
-            assert!(project_root.join("resources/doc").is_dir());
-        }
-
-        #[test]
-        fn fails_if_dir_path_is_blocked_by_file() {
-            let tmp = tempfile::tempdir().unwrap();
-            let project_root = tmp.path();
-
-            // Create a file "src" so "src/app" cannot become a directory
-            File::create(project_root.join("src")).unwrap();
-
-            let dirs = vec![
-                project_root.join("src/app"),
-            ];
-
-            let err = create_sub_dirs(&dirs).unwrap_err();
-            assert_eq!(err.0, PomErrorCode::SubDirsCreationFail);
-        }
-    }
-
-    mod dir_name_extraction {
-        use super::*;
-
-        #[test]
-        fn extracts_last_component_normal_path() {
-            let p = std::path::Path::new("src/app");
-            let name = get_dir_name(p).unwrap();
-            assert_eq!(name, "app");
-        }
-
-        #[test]
-        fn extracts_last_component_with_trailing_slash() {
-            let p = std::path::Path::new("src/app/");
-            let name = get_dir_name(p).unwrap();
-            assert_eq!(name, "app");
-        }
-
-        #[test]
-        fn fails_on_empty_path() {
-            let p = std::path::Path::new("");
-            let err = get_dir_name(p).unwrap_err();
-            assert_eq!(err.0, PomErrorCode::GenerationLayoutFileInvalidEntryPath);
-        }
-    }
-
-    mod doxygen_groups_generation {
-        use super::*;
-
-        #[test]
-        fn returns_none_when_no_defgroup_and_no_brief() {
-            let entry = GenerationLayoutEntry {
-                path: "src/app".into(),
-                defgroup: None,
-                brief: None,
-                contains_modules: false,
-                module_prefix: None,
-            };
-
-            let group = get_doxygen_group(&entry, "app");
-            assert!(group.is_none());
-        }
-
-        #[test]
-        fn creates_group_when_defgroup_or_brief_present() {
-            let entry = GenerationLayoutEntry {
-                path: "src/app".into(),
-                defgroup: Some("Application Layer".into()),
-                brief: Some("High-level behavior.".into()),
-                contains_modules: false,
-                module_prefix: None,
-            };
-
-            let group = get_doxygen_group(&entry, "app").unwrap();
-            assert_eq!(group.name, "app");
-            assert_eq!(group.defgroup.as_deref(), Some("Application Layer"));
-            assert_eq!(group.brief.as_deref(), Some("High-level behavior."));
-        }
 
         #[test]
         fn group_block_contains_expected_tags() {
@@ -665,7 +265,7 @@ mod tests{
                 brief: Some("High-level behavior.".into()),
             };
 
-            let block = generate_group_block(&group);
+            let block = create_group_block(&group);
 
             // Keep assertions loose (format can evolve)
             assert!(block.contains("@defgroup"));
@@ -693,7 +293,7 @@ mod tests{
                 },
             ];
 
-            generate_doc_groups_file(project_root, &groups).unwrap();
+            create_doc_groups_file(project_root, &groups).unwrap();
 
             let mut contents = String::new();
             File::open(project_root.join("doc_groups.h"))
@@ -704,102 +304,6 @@ mod tests{
             assert!(contents.contains("@defgroup"));
             assert!(contents.contains("app"));
             assert!(contents.contains("hld"));
-        }
-    }
-
-    mod target_free_files_tests {
-        use super::*;
-
-        fn code_of<T>(r: PomResult<T>) -> PomErrorCode {
-            match r {
-                Ok(_) => panic!("expected Err, got Ok"),
-                Err((code, _)) => code,
-            }
-        }
-
-        #[test]
-        fn core_copies_files_to_project_root() {
-            let tmp = tempfile::tempdir().unwrap();
-            let project_root = tmp.path();
-
-            let src_tmp = tempfile::tempdir().unwrap();
-            let source_dir = src_tmp.path();
-
-            // Create 2 files in source
-            let mut f1 = File::create(source_dir.join(".gitignore")).unwrap();
-            writeln!(f1, "hello").unwrap();
-
-            let mut f2 = File::create(source_dir.join("Doxyfile")).unwrap();
-            writeln!(f2, "world").unwrap();
-
-            let count = copy_target_free_files_core_logic(project_root, source_dir).unwrap();
-            assert_eq!(count, 2);
-
-            assert!(project_root.join(".gitignore").is_file());
-            assert!(project_root.join("Doxyfile").is_file());
-        }
-
-        #[test]
-        fn core_ignores_subdirectories() {
-            let tmp = tempfile::tempdir().unwrap();
-            let project_root = tmp.path();
-
-            let src_tmp = tempfile::tempdir().unwrap();
-            let source_dir = src_tmp.path();
-
-            // file + subdir + file inside subdir
-            File::create(source_dir.join(".clang-format")).unwrap();
-            fs::create_dir_all(source_dir.join("nested")).unwrap();
-            File::create(source_dir.join("nested").join("should_not_copy")).unwrap();
-
-            let count = copy_target_free_files_core_logic(project_root, source_dir).unwrap();
-            assert_eq!(count, 1);
-
-            assert!(project_root.join(".clang-format").is_file());
-            assert!(!project_root.join("nested").exists());
-            assert!(!project_root.join("should_not_copy").exists());
-        }
-
-        #[test]
-        fn core_returns_zero_when_source_is_empty() {
-            let tmp = tempfile::tempdir().unwrap();
-            let project_root = tmp.path();
-
-            let src_tmp = tempfile::tempdir().unwrap();
-            let source_dir = src_tmp.path();
-
-            let count = copy_target_free_files_core_logic(project_root, source_dir).unwrap();
-            assert_eq!(count, 0);
-        }
-
-        #[test]
-        fn core_fails_if_destination_already_exists() {
-            let tmp = tempfile::tempdir().unwrap();
-            let project_root = tmp.path();
-
-            let src_tmp = tempfile::tempdir().unwrap();
-            let source_dir = src_tmp.path();
-
-            // Source has a file named ".gitignore"
-            File::create(source_dir.join(".gitignore")).unwrap();
-
-            // Destination already has ".gitignore"
-            File::create(project_root.join(".gitignore")).unwrap();
-
-            let err = copy_target_free_files_core_logic(project_root, source_dir).unwrap_err();
-            assert_eq!(err.0, PomErrorCode::TargetFreeFilesAlreadyExists);
-        }
-
-        #[test]
-        fn core_fails_when_source_dir_missing() {
-            let tmp = tempfile::tempdir().unwrap();
-            let project_root = tmp.path();
-
-            // A path that does not exist
-            let source_dir = project_root.join("does_not_exist");
-
-            let err = copy_target_free_files_core_logic(project_root, &source_dir).unwrap_err();
-            assert_eq!(err.0, PomErrorCode::TargetFreeFilesSourceReadFail);
         }
     }
 }

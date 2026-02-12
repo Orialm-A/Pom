@@ -46,6 +46,9 @@ pub enum ProjectCommands {
         /// Path where the project will be created
         #[arg(short, long, value_name = "PATH")]
         path: Option<PathBuf>,
+        /// Specify the project target
+        #[arg(short, long, value_name = "TARGET")]
+        target: Option<String>,
         /// Print what would be done without creating / modifying files
         #[arg(short = 'n', long, )]
         dry_run: bool,
