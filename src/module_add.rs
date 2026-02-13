@@ -21,12 +21,11 @@ pub fn module_add(
     println!("{:#?}", project_toml);
 
     // Resolve user parameters
-    let (_, normalized_module_name, upper_normalized_name) = resolve_new_module_name(module_name)?;
-    println!("{:#?} / {:#?}", normalized_module_name, upper_normalized_name);
-
     let (module_path, module_prefix) = resolve_module_level(level, &project_toml.levels)?;
+    println!("{:#?}", module_path);
 
-    println!("{:#?} - {:#?}", module_path, module_prefix);
+    let (normalized_module_name, upper_normalized_name) = resolve_new_module_name(module_name, &module_prefix)?;
+    println!("{:#?} / {:#?}", normalized_module_name, upper_normalized_name);
 
     let brief = resolve_module_brief(brief)?;
     let details = resolve_module_details(details)?;

@@ -14,8 +14,15 @@ pub fn resolve_project_name(project_name_parameter: Option<String>) -> PomResult
     resolve_new_name(project_name_parameter, "Project name")
 }
 
-pub fn resolve_new_module_name(module_name_parameter: Option<String>) -> PomResult<(String, String, String)> {
-    resolve_new_name(module_name_parameter, "Module name")
+pub fn resolve_new_module_name(module_name_parameter: Option<String>, module_prefix: &Option<String>) -> PomResult<(String, String)> {
+    let (_, mut normalized_module_name, mut upper_normalized_name) = resolve_new_name(module_name_parameter, "Module name")?;
+
+    if let Some(module_prefix) = module_prefix {
+        normalized_module_name = format!("{}_{}", module_prefix, normalized_module_name);
+        upper_normalized_name = format!("{}_{}", module_prefix.to_case(Case::Constant), upper_normalized_name);
+    }
+
+    Ok((normalized_module_name, upper_normalized_name))
 }
 
 
