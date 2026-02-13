@@ -137,3 +137,15 @@ fn validate_project_root(project_root: &Path) -> PomResult<()> {
 
     Ok(())
 }
+
+
+pub fn resolve_module_brief(parameter_brief: Option<String>) -> PomResult<String> {
+    let brief = prompt_if_missing_string(parameter_brief, "Module brief for Doxygen (Press enter to leave empty)")?;
+    Ok(brief.trim().to_string())
+}
+
+
+pub fn resolve_module_details(parameter_details: Option<String>) -> PomResult<String> {
+    let details = prompt_if_missing_string(parameter_details, "Module details for Doxygen (Press enter to leave empty)")?;
+    Ok(details.trim().to_string())
+}

@@ -107,7 +107,7 @@ pub struct ValidatedEntry {
 /// Represents the action to take when a file write or copy conflicts with an existing file
 #[derive(PartialEq)]
 pub enum ExistingFilePolicy {
-    Overwrite,  // Cancel "unused" warning for now - make it available during unit tests
+    // Overwrite,  // Cancel "unused" warning for now - make it available during unit tests
     Fail,
 }
 
