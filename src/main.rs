@@ -6,6 +6,7 @@ mod errors;
 mod project_layout;
 mod filesystem;
 mod template_rendering;
+mod module_add;
 
 use clap::Parser;
 use crate::cli::parameters::TopLevelCommands::*;
@@ -14,6 +15,7 @@ use crate::cli::parameters::ModuleCommands as Mod;
 
 // API
 use crate::project_create::project_create;
+use crate::module_add::module_add;
 use crate::pom_api as api;
 
 
@@ -34,7 +36,13 @@ fn main() {
             Proj::Config => api::project_config_function(),
         },
         Module { module_command } => match module_command {
-            Mod::Add { module_name } => api::module_add_function(module_name),
+            Mod::Add {
+                module_name,
+                layer,
+                brief,
+                details,
+                dry_run,
+            } => module_add(module_name, layer, brief, details, dry_run),
             cli::parameters::ModuleCommands::Rename { old_module_name, new_module_name } => api::module_rename_function(old_module_name, new_module_name),
             Mod::Remove { module_name } => api::module_remove_function(module_name),
         },
