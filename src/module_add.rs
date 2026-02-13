@@ -3,6 +3,8 @@
 //! This Rust module is used to add a C module to a pom project
 
 use crate::errors::{PomResult};
+use crate::cli::resolution::{resolve_project_root};
+use crate::project_toml::{resolve_project_toml};
 
 
 pub fn module_add(
@@ -12,6 +14,16 @@ pub fn module_add(
     details: Option<String>,
     dry_run: bool,
 ) -> PomResult<()> {
+
+    // Check project
+        let project_root = resolve_project_root(None)?;
+        let project_toml = resolve_project_toml(&project_root)?;
+        println!("{:#?}", project_toml);
+
+    // Resolve user parameters
+
+
+    // Action
 
     Ok(())
 }

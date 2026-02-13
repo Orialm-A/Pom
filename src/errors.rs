@@ -48,6 +48,10 @@ pub enum PomErrorCode {
     PromptStringFail = 41,
     // `pom.toml` file errors: 5x
     PomTomlFileSerializationFail = 50,
+    PomTomlFileDeserializationFail = 51,
+    PomTomlNotFound = 52,
+    PomTomlNotFile = 53,
+    PomTomlFileCantOpen = 54,
     // Assets errors: 6x
     FileTemplateMissing = 60,
 }
@@ -64,8 +68,8 @@ impl PomErrorCode {
             Self::PathToProjectRootCantGetCurrentDir => "Could not get the current directory.",
             Self::PathToProjectRootEnvVarNotUnicode => "Env var `POM_DEV_TEST_PROJECT` contains non-Unicode characters.",
             Self::PathToProjectRootNotEmpty => "Project path already exists and is not empty.",
-            Self::PathToProjectRootFailedToReadDir => "Project path already exists but could not be read.",
-            Self::PathToProjectRootExistsAndNotDir => "Project path already exists but is not a directory.",
+            Self::PathToProjectRootFailedToReadDir => "Project path exists but could not be read.",
+            Self::PathToProjectRootExistsAndNotDir => "Project path exists but is not a directory.",
             Self::PathToProjectRootFailedToCreateRoot => "Failed to create the project root due to an OS error.",
 
             // Generation layout file errors
@@ -93,6 +97,10 @@ impl PomErrorCode {
 
             // pom.toml
             Self::PomTomlFileSerializationFail => "Failed to serialize `pom.toml` content.",
+            Self::PomTomlFileDeserializationFail => "Failed to deserialize `pom.toml` content.",
+            Self::PomTomlNotFound => "Can't found `pom.toml`.",
+            Self::PomTomlNotFile => "`pom.toml` found but is not a file.",
+            Self::PomTomlFileCantOpen => "`pom.toml` was found but could not be opened.",
 
             // Templates/assets
             Self::FileTemplateMissing => "File templates are missing from the default assets.",

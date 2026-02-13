@@ -7,6 +7,7 @@ mod project_layout;
 mod filesystem;
 mod template_rendering;
 mod module_add;
+mod project_toml;
 
 use clap::Parser;
 use crate::cli::parameters::TopLevelCommands::*;
