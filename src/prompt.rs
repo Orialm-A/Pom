@@ -6,7 +6,8 @@ use unicode_normalization::UnicodeNormalization;
 use dialoguer::{Select, Input, theme::ColorfulTheme};
 use crate::errors::{PomErrorCode, PomResult};
 use std::collections::HashMap;
-use std::path::{PathBuf,};
+use std::path::{PathBuf};
+use crate::project_layout::{ModuleLevelsMap, ModuleLevelSpec};
 
 
 
@@ -64,27 +65,40 @@ pub fn slugify_snake(input: &str) -> String {
 
 /// Select a target from a menu
 pub fn select_target(available_targets: &HashMap<String, PathBuf>) -> PomResult<PathBuf> {
-    let mut keys: Vec<&String> = available_targets.keys().collect();
+    let keys: Vec<&String> = available_targets.keys().collect();
 
     if keys.is_empty() {
         return Err((PomErrorCode::FileTemplateMissing, Some("In `assets/target`".to_string())));
     }
 
+    let selected_key = menu_helper(keys, "Typed target not found. Select one of the available targets")?;
+    Ok(available_targets[&selected_key].clone())
+}
+
+
+/// Select a module level from a menu
+pub fn select_module_level(available_levels: &ModuleLevelsMap) -> PomResult<ModuleLevelSpec> {
+    let keys: Vec<&String> = available_levels.keys().collect();
+    let selected_key = menu_helper(keys, "Typed level not found. Select one from availables in `pom.toml`")?;
+    Ok(available_levels[&selected_key].clone())
+}
+
+
+fn menu_helper(mut keys: Vec<&String>, prompt_hint: &str) -> PomResult<String> {
     keys.sort();
 
     let selection = Select::with_theme(&ColorfulTheme::default())
-        .with_prompt("Target not found. Select one of the available targets")
+        .with_prompt(prompt_hint)
         .items(&keys)
         .default(0)
         .interact()
         .map_err(|e| (
-            PomErrorCode::PromptTargetSelectionFail,
+            PomErrorCode::PromptSelectionFail,
             Some(e.to_string()),
         ))?;
 
 
-    let selected_key = keys[selection];
-    Ok(available_targets[selected_key].clone())
+    Ok(keys[selection].clone())
 }
 
 #[cfg(test)]

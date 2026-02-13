@@ -41,6 +41,10 @@ pub struct ModuleLevelSpec {
 }
 
 
+/// Represents the map of levels name and spec
+pub type ModuleLevelsMap = HashMap<String, ModuleLevelSpec>;
+
+
 /// Represents the data extracted from the project layout
 pub struct ResolvedProjectLayout {
     pub dirs: Vec<PathBuf>,

@@ -1,6 +1,7 @@
-use crate::prompt::{prompt_if_missing_string, slugify_snake, select_target};
+use crate::prompt::{prompt_if_missing_string, slugify_snake, select_target, select_module_level};
 use crate::errors::{PomResult, PomErrorCode};
 use crate::filesystem::{EntryKind, validate_dir_entry};
+use crate::project_layout::{ModuleLevelsMap};
 
 use std::env;
 use std::path::{PathBuf, Path};
@@ -148,4 +149,17 @@ pub fn resolve_module_brief(parameter_brief: Option<String>) -> PomResult<String
 pub fn resolve_module_details(parameter_details: Option<String>) -> PomResult<String> {
     let details = prompt_if_missing_string(parameter_details, "Module details for Doxygen (Press enter to leave empty)")?;
     Ok(details.trim().to_string())
+}
+
+
+pub fn resolve_module_level(level_parameter: Option<String>, project_levels_map: &ModuleLevelsMap) -> PomResult<(String, Option<String>)> {
+    if let Some(level_parameter) = level_parameter {
+        if let Some(level_spec) = project_levels_map.get(&level_parameter) {
+            return Ok((level_spec.path.clone(), level_spec.prefix.clone()));
+        }
+    }
+
+    let selected_level_spec = select_module_level(project_levels_map)?;
+
+    Ok((selected_level_spec.path.clone(), selected_level_spec.prefix.clone()))
 }

@@ -44,7 +44,7 @@ pub enum PomErrorCode {
     FilesystemCopyFail = 309,
     FilesystemFileOverwriteForbidded = 310,
     // Prompt errors: 4x
-    PromptTargetSelectionFail = 40,
+    PromptSelectionFail = 40,
     PromptStringFail = 41,
     // `pom.toml` file errors: 5x
     PomTomlFileSerializationFail = 50,
@@ -92,7 +92,7 @@ impl PomErrorCode {
             Self::FilesystemFileOverwriteForbidded => "File copy or creation failed because overwrite is forbidden by policy.",
 
             // Prompt errors
-            Self::PromptTargetSelectionFail => "Failed to prompt for target selection.",
+            Self::PromptSelectionFail => "Failed to prompt for menu item selection.",
             Self::PromptStringFail => "Failed to prompt for input.",
 
             // pom.toml

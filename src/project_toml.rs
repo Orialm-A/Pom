@@ -6,14 +6,15 @@ use crate::errors::{PomResult, PomErrorCode};
 use std::path::{Path};
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
-use crate::project_layout::{ModuleLevelSpec};
+use crate::project_layout::{ModuleLevelSpec, ModuleLevelsMap};
 use std::fs;
 use crate::filesystem::{write_file, ExistingFilePolicy};
 
 
+/// Intermediary structure to serialize / deserialize the content of `pom.toml` for a project
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PomToml {
-    pub levels: HashMap<String, ModuleLevelSpec>,
+    pub levels: ModuleLevelsMap,
     // Add other project data to save here
 }
 
