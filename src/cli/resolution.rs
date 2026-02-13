@@ -15,14 +15,14 @@ pub fn resolve_project_name(project_name_parameter: Option<String>) -> PomResult
 }
 
 pub fn resolve_new_module_name(module_name_parameter: Option<String>, module_prefix: &Option<String>) -> PomResult<(String, String)> {
-    let (_, mut normalized_module_name, mut upper_normalized_name) = resolve_new_name(module_name_parameter, "Module name")?;
+    let (_, mut normalized_module_name, mut header_guard) = resolve_new_name(module_name_parameter, "Module name")?;
 
     if let Some(module_prefix) = module_prefix {
         normalized_module_name = format!("{}_{}", module_prefix, normalized_module_name);
-        upper_normalized_name = format!("{}_{}", module_prefix.to_case(Case::Constant), upper_normalized_name);
+        header_guard = format!("{}_{}_H", module_prefix.to_case(Case::Constant), header_guard);
     }
 
-    Ok((normalized_module_name, upper_normalized_name))
+    Ok((normalized_module_name, header_guard))
 }
 
 
@@ -159,14 +159,14 @@ pub fn resolve_module_details(parameter_details: Option<String>) -> PomResult<St
 }
 
 
-pub fn resolve_module_level(level_parameter: Option<String>, project_levels_map: &ModuleLevelsMap) -> PomResult<(String, Option<String>)> {
+pub fn resolve_module_level(level_parameter: Option<String>, project_levels_map: &ModuleLevelsMap) -> PomResult<(String, Option<String>, String)> {
     if let Some(level_parameter) = level_parameter {
         if let Some(level_spec) = project_levels_map.get(&level_parameter) {
-            return Ok((level_spec.path.clone(), level_spec.prefix.clone()));
+            return Ok((level_spec.path.clone(), level_spec.prefix.clone(), level_parameter));
         }
     }
 
-    let selected_level_spec = select_module_level(project_levels_map)?;
+    let (selected_level_spec, selected_level_name) = select_module_level(project_levels_map)?;
 
-    Ok((selected_level_spec.path.clone(), selected_level_spec.prefix.clone()))
+    Ok((selected_level_spec.path.clone(), selected_level_spec.prefix.clone(), selected_level_name))
 }

@@ -54,6 +54,13 @@ pub enum PomErrorCode {
     PomTomlFileCantOpen = 54,
     // Assets errors: 6x
     FileTemplateMissing = 60,
+    // Module templates: 7x
+    ModuleTemplateSourceNotFound = 70,
+    ModuleTemplateSourceNotDir = 71,
+    ModuleTemplateCouldNotFindAny = 72,
+    ModuleTemplateMissing = 73,
+    ModuleTemplateUnexpectedContentFound = 74,
+
 }
 
 impl PomErrorCode {
@@ -104,6 +111,12 @@ impl PomErrorCode {
 
             // Templates/assets
             Self::FileTemplateMissing => "File templates are missing from the default assets.",
+
+            //
+            Self::ModuleTemplateSourceNotDir => "Module tmplate source is not a directory.",
+            Self::ModuleTemplateCouldNotFindAny => "Module template source was not found.",
+            Self::ModuleTemplateMissing => "Module template is missing.",
+            Self::ModuleTemplateUnexpectedContentFound => "Expected to find only `template.c.pomrt` and `template.h.pomrt` in module template source.",
 
             // Fallback
             _ => "Internal: A non-critical error was handled as fatal. This is a Pom bug.",

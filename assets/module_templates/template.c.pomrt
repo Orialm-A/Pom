@@ -1,0 +1,31 @@
+/**
+ *
+ * @ingroup {{pom:module_doxygen_group}}
+ * @file
+ * {{pom:module_doxygen_brief}}
+ *
+ * {{pom:module_doxygen_details}}
+ *
+ * SPDX-License-Identifier: MIT
+ * Copyright © {{pom:current_year}}
+ *
+ */
+
+/* This file contains the implementation for the module. Only content
+ * declared in the corresponding header is part of the public API. */
+
+// --- includes --------------------------------------
+
+// --- typedefs and structures -----------------------
+
+// --- external declarations -------------------------
+
+// --- defines and macros ----------------------------
+
+// --- functions prototypes --- (scope: module) ------
+
+// --- static global variable (scope: module) --------
+
+// --- function implementations (scope: module) ------
+
+// --- function implementations (scope: public) ------

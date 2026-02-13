@@ -77,10 +77,10 @@ pub fn select_target(available_targets: &HashMap<String, PathBuf>) -> PomResult<
 
 
 /// Select a module level from a menu
-pub fn select_module_level(available_levels: &ModuleLevelsMap) -> PomResult<ModuleLevelSpec> {
+pub fn select_module_level(available_levels: &ModuleLevelsMap) -> PomResult<(ModuleLevelSpec, String)> {
     let keys: Vec<&String> = available_levels.keys().collect();
     let selected_key = menu_helper(keys, "Typed level not found. Select one from availables in `pom.toml`")?;
-    Ok(available_levels[&selected_key].clone())
+    Ok((available_levels[&selected_key].clone(), selected_key))
 }
 
 
