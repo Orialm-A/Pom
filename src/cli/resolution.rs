@@ -6,17 +6,29 @@ use std::env;
 use std::path::{PathBuf, Path};
 use std::collections::HashMap;
 use walkdir::{WalkDir};
+use convert_case::{Case, Casing};
 
 
+pub fn resolve_project_name(project_name_parameter: Option<String>) -> PomResult<(String, String, String)> {
+    resolve_new_name(project_name_parameter, "Project name")
+}
 
-pub fn resolve_project_name(project_name_parameter: Option<String>) -> PomResult<(String, String)> {
-    // `project_name` is to be used in documents read by humans, like README.md
-    let project_name = prompt_if_missing_string(project_name_parameter, "Project name")?;
+pub fn resolve_new_module_name(module_name_parameter: Option<String>) -> PomResult<(String, String, String)> {
+    resolve_new_name(module_name_parameter, "Module name")
+}
 
-    // `project_name_normalized` is to be used in paths
-    let project_name_normalized = slugify_snake(&project_name);
 
-    Ok((project_name, project_name_normalized))
+fn resolve_new_name(original_name: Option<String>, prompt_hint: &str) -> PomResult<(String, String, String)> {
+    // `original_name` is the name as typed by user (with whitespaces, emojis...)
+    let original_name = prompt_if_missing_string(original_name, prompt_hint)?;
+
+    // `normalized_name` is to be used in paths
+    let normalized_name = slugify_snake(&original_name);
+
+    // `upper_normalized_name` is to be used for modules header guard
+    let upper_normalized_name = normalized_name.to_case(Case::Constant);
+
+    Ok((original_name, normalized_name, upper_normalized_name))
 }
 
 
