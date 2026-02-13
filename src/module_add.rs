@@ -10,6 +10,7 @@ use chrono::Datelike;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 use crate::filesystem::{copy_files, ExistingFilePolicy};
+use std::fs;
 
 
 pub fn module_add(
@@ -37,7 +38,7 @@ pub fn module_add(
     let current_year = chrono::Local::now().year().to_string();
 
     let mut rendering_fields = TemplateFields::new();
-    rendering_fields.insert(FieldKey::ModuleNameNormalized, module_name_normalized);
+    rendering_fields.insert(FieldKey::ModuleNameNormalized, &module_name_normalized);
     rendering_fields.insert(FieldKey::ModuleHeaderGuard, module_header_guard);
     rendering_fields.insert(FieldKey::ModuleDoxygenGroup, level_group);
     rendering_fields.insert(FieldKey::ModuleDoxygenBrief, brief);
@@ -50,6 +51,12 @@ pub fn module_add(
 
     if !dry_run {
         copy_files(&module_template_source_path, &module_full_path, ExistingFilePolicy::Fail, &Some(rendering_fields))?;
+        let c_file_path_template_name = module_full_path.join("template.c");
+        let c_file_path_correct_name = module_full_path.join(format!("{}.c", &module_name_normalized));
+        let h_file_path_template_name = module_full_path.join("template.h");
+        let h_file_path_correct_name = module_full_path.join(format!("{}.h", &module_name_normalized));
+        fs::rename(c_file_path_template_name, c_file_path_correct_name);
+        fs::rename(h_file_path_template_name, h_file_path_correct_name);
     }
 
     Ok(())
