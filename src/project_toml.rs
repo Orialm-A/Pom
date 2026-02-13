@@ -45,12 +45,12 @@ pub fn resolve_project_toml(project_root: &Path) -> PomResult<PomToml> {
         ));
     }
 
-    let pom_toml_str = match fs::read_to_string(pom_toml_path) {
+    let pom_toml_str = match fs::read_to_string(&pom_toml_path) {
         Ok(pom_toml_str) => pom_toml_str,
         Err(src) => {
             return Err((
             PomErrorCode::PomTomlFileCantOpen,
-            Some(src.to_string()),
+            Some(format!("{}.\r\n{}", pom_toml_path.display().to_string(), src.to_string())),
         ));
         }
     };
@@ -83,4 +83,82 @@ pub fn create_pom_toml_file(project_root: &Path, module_levels_list: &HashMap<St
     )?;
 
     write_file(&pom_toml_file_path, &pom_toml_file_content, &ExistingFilePolicy::Fail)
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::tempdir;
+
+    fn minimal_valid_pom_toml() -> String {
+        r#"
+[levels.app]
+path = "src/app"
+prefix = "a"
+
+[levels.hld]
+path = "src/hld"
+prefix = "h"
+
+[levels.lld]
+path = "src/lld"
+prefix = "l"
+"#
+        .to_string()
+    }
+
+    #[test]
+    fn resolve_project_toml_ok_minimal() {
+        let dir = tempdir().unwrap();
+        let root = dir.path();
+
+        fs::write(root.join("pom.toml"), minimal_valid_pom_toml()).unwrap();
+
+        let res = resolve_project_toml(root);
+        assert!(res.is_ok(), "Expected Ok(..), got: {:?}", res);
+    }
+
+    #[test]
+    fn resolve_project_toml_err_not_found() {
+        let dir = tempdir().unwrap();
+        let root = dir.path();
+
+        let err = resolve_project_toml(root).unwrap_err();
+        assert_eq!(err.0, PomErrorCode::PomTomlNotFound);
+    }
+
+    #[test]
+    fn resolve_project_toml_err_pom_toml_not_file() {
+        let dir = tempdir().unwrap();
+        let root = dir.path();
+
+        fs::create_dir(root.join("pom.toml")).unwrap();
+
+        let err = resolve_project_toml(root).unwrap_err();
+        assert_eq!(err.0, PomErrorCode::PomTomlNotFile);
+    }
+
+    #[test]
+    fn resolve_project_toml_err_deserialization_fail() {
+        let dir = tempdir().unwrap();
+        let root = dir.path();
+
+        // invalid TOML on purpose
+        fs::write(root.join("pom.toml"), "this is not = toml = [").unwrap();
+
+        let err = resolve_project_toml(root).unwrap_err();
+        assert_eq!(err.0, PomErrorCode::PomTomlFileDeserializationFail);
+    }
+
+    #[test]
+    fn resolve_project_toml_err_project_root_not_dir() {
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("not_a_dir");
+        fs::write(&file_path, "x").unwrap();
+
+        let err = resolve_project_toml(&file_path).unwrap_err();
+        assert_eq!(err.0, PomErrorCode::PathToProjectRootExistsAndNotDir);
+    }
 }
