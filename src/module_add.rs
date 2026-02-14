@@ -117,9 +117,24 @@ fn validate_module_template_dir(root: &Path) -> PomResult<()> {
 }
 
 fn create_module_files(module_name: &str, source_path: &Path, module_path: &Path, fields: &TemplateFields) -> PomResult<()> {
+
+    if !module_path.exists() {
+        return Err((
+            PomErrorCode::ModuleDestinationDirNotFound,
+            Some(module_path.display().to_string()),
+        ));
+    }
+    if !module_path.is_dir() {
+        return Err((
+            PomErrorCode::ModuleDestinationDirNotDir,
+            Some(module_path.display().to_string()),
+        ));
+    }
+
     for extension in ["h", "c"] {
         let file_source_path = source_path.join(format!("template.{}.pomrt", extension));
         let file_destination_path = module_path.join(format!("{}.{}", module_name, extension));
+
         copy_with_rendering_helper(&file_source_path, &file_destination_path, &fields, &ExistingFilePolicy::Fail)?;
     }
     Ok(())

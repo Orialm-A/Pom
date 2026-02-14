@@ -59,6 +59,8 @@ pub enum PomErrorCode {
     ModuleTemplateSourceNotDir = 71,
     ModuleTemplateCouldNotFindAny = 72,
     ModuleTemplateMissing = 73,
+    ModuleDestinationDirNotFound = 74,
+    ModuleDestinationDirNotDir = 75,
 
 }
 
@@ -115,6 +117,8 @@ impl PomErrorCode {
             Self::ModuleTemplateSourceNotDir => "Module tmplate source is not a directory.",
             Self::ModuleTemplateCouldNotFindAny => "Module template source was not found.",
             Self::ModuleTemplateMissing => "Module template is missing.",
+            Self::ModuleDestinationDirNotFound => "Module destination does not exist.",
+            Self::ModuleDestinationDirNotDir => "Module destination is not a directory.",
 
             // Fallback
             _ => "Internal: A non-critical error was handled as fatal. This is a Pom bug.",
