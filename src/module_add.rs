@@ -8,9 +8,7 @@ use crate::project_toml::{resolve_project_toml};
 use crate::template_rendering::{TemplateFields, FieldKey};
 use chrono::Datelike;
 use std::path::{Path, PathBuf};
-use walkdir::WalkDir;
-use crate::filesystem::{copy_files, ExistingFilePolicy};
-use std::fs;
+use crate::filesystem::{ExistingFilePolicy, copy_with_rendering_helper};
 
 
 pub fn module_add(
@@ -50,13 +48,7 @@ pub fn module_add(
     // Action
 
     if !dry_run {
-        copy_files(&module_template_source_path, &module_full_path, ExistingFilePolicy::Fail, &Some(rendering_fields))?;
-        let c_file_path_template_name = module_full_path.join("template.c");
-        let c_file_path_correct_name = module_full_path.join(format!("{}.c", &module_name_normalized));
-        let h_file_path_template_name = module_full_path.join("template.h");
-        let h_file_path_correct_name = module_full_path.join(format!("{}.h", &module_name_normalized));
-        fs::rename(c_file_path_template_name, c_file_path_correct_name);
-        fs::rename(h_file_path_template_name, h_file_path_correct_name);
+        create_module_files(&module_name_normalized, &module_template_source_path, &module_full_path, &rendering_fields)?;
     }
 
     Ok(())
@@ -116,30 +108,14 @@ fn validate_module_template_dir(root: &Path) -> PomResult<()> {
         ));
     }
 
-    let mut file_count = 0usize;
-    for entry in WalkDir::new(root).min_depth(1).into_iter() { // Exclude root itself
-        let entry = entry.map_err(|e| (
-            PomErrorCode::ModuleTemplateUnexpectedContentFound,
-            Some(e.to_string()),
-        ))?;
+    Ok(())
+}
 
-        if !entry.file_type().is_file() {
-            return Err((
-                PomErrorCode::ModuleTemplateUnexpectedContentFound,
-                Some(format!("Found {}", entry.path().display().to_string())),
-            ));
-        }
-
-        file_count += 1;
-
+fn create_module_files(module_name: &str, source_path: &Path, module_path: &Path, fields: &TemplateFields) -> PomResult<()> {
+    for extension in ["h", "c"] {
+        let file_source_path = source_path.join(format!("template.{}.pomrt", extension));
+        let file_destination_path = module_path.join(format!("{}.{}", module_name, extension));
+        copy_with_rendering_helper(&file_source_path, &file_destination_path, &fields, &ExistingFilePolicy::Fail)?;
     }
-
-    if file_count != 2 {
-        return Err((
-            PomErrorCode::ModuleTemplateUnexpectedContentFound,
-            Some(format!("Found {} extra files in {}", file_count -2, root.display().to_string())),
-        ));
-    }
-
     Ok(())
 }

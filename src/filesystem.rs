@@ -267,7 +267,7 @@ fn plain_copy_helper(entry_path: &Path, destination_path: &Path) -> PomResult<us
 }
 
 
-fn copy_with_rendering_helper(
+pub fn copy_with_rendering_helper(
     entry_path: &Path,
     destination_path: &Path,
     fields: &TemplateFields,
@@ -291,7 +291,6 @@ fn copy_with_rendering_helper(
 
 /// Write a file
 ///
-/// Override if it exists
 /// May error `PomErrorCode::FilesystemFileCreationFail`, `FilesystemFileWriteFail` or `FilesystemFileOverwriteForbidded`
 pub fn write_file(file_path: &Path, file_content: &str, existing_file_policy: &ExistingFilePolicy)  -> PomResult<()>  {
     if file_path.exists() {
