@@ -33,12 +33,16 @@ pub struct DoxygenGroup {
 }
 
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 /// Describe a module specs for `pom module create`
 pub struct ModuleLevelSpec {
     pub path: String, // Store paths relatively to project root to ensure portability across different computers (`git clone`)
     pub prefix: Option<String>,
 }
+
+
+/// Represents the map of levels name and spec
+pub type ModuleLevelsMap = HashMap<String, ModuleLevelSpec>;
 
 
 /// Represents the data extracted from the project layout

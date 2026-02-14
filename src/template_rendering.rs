@@ -8,6 +8,12 @@ use once_cell::sync::Lazy;
 pub enum FieldKey {
     ProjectName,
     ProjectNameNormalized,
+    ModuleNameNormalized,
+    ModuleHeaderGuard,
+    ModuleDoxygenGroup,
+    ModuleDoxygenBrief,
+    ModuleDoxygenDetails,
+    CurrentYear,
 }
 
 
@@ -16,6 +22,12 @@ impl FieldKey {
         Some(match candidate {
             "project_name" => FieldKey::ProjectName,
             "project_name_normalized" => FieldKey::ProjectNameNormalized,
+            "module_name_normalized" => FieldKey::ModuleNameNormalized,
+            "MODULE_HEADER_GUARD" => FieldKey::ModuleHeaderGuard,
+            "module_doxygen_group" => FieldKey::ModuleDoxygenGroup,
+            "module_doxygen_brief" => FieldKey::ModuleDoxygenBrief,
+            "module_doxygen_details" => FieldKey::ModuleDoxygenDetails,
+            "current_year" => FieldKey::CurrentYear,
             _ => return None,
         })
     }

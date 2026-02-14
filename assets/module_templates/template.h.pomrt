@@ -1,0 +1,29 @@
+#ifndef {{pom:MODULE_HEADER_GUARD}}
+#define {{pom:MODULE_HEADER_GUARD}}
+
+/**
+ *
+ * {{pom:module_doxygen_group}}
+ * @file
+ * {{pom:module_doxygen_brief}}
+ *
+ * {{pom:module_doxygen_details}}
+ *
+ * SPDX-License-Identifier: MIT
+ * Copyright © {{pom:current_year}}
+ *
+ */
+
+/* Public API: visible to other modules */
+
+// --- includes --------------------------------------
+
+// --- typedefs and structures (scope: public) -------
+
+// --- external declarations -------------------------
+
+// --- defines and macros (scope: public) ------------
+
+// --- function prototypes (scope: public) -----------
+
+#endif /* {{pom:MODULE_HEADER_GUARD}} */

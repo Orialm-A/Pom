@@ -62,7 +62,22 @@ pub enum ProjectCommands {
 #[derive(Subcommand, Debug)]
 pub enum ModuleCommands {
     /// Add a new module (name will be prompted of omitted)
-    Add { module_name: Option<String> },
+    Add {
+        /// Module name
+        module_name: Option<String>,
+        /// Layer where to add the project
+        #[arg(short, long, value_name = "LAYER")]
+        layer: Option<String>,
+        /// Module documentation `@brief`
+        #[arg(short, long, value_name = "BRIEF")]
+        brief: Option<String>,
+        /// Module documentation `@details`
+        #[arg(short, long, value_name = "DETAILS")]
+        details: Option<String>,
+        /// Print what would be done without creating / modifying files
+        #[arg(short = 'n', long, )]
+        dry_run: bool,
+    },
     /// Rename a module (old and new name will be prompted of omitted)
     Rename {
         old_module_name: Option<String>,

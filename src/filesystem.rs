@@ -267,7 +267,7 @@ fn plain_copy_helper(entry_path: &Path, destination_path: &Path) -> PomResult<us
 }
 
 
-fn copy_with_rendering_helper(
+pub fn copy_with_rendering_helper(
     entry_path: &Path,
     destination_path: &Path,
     fields: &TemplateFields,
@@ -291,7 +291,6 @@ fn copy_with_rendering_helper(
 
 /// Write a file
 ///
-/// Override if it exists
 /// May error `PomErrorCode::FilesystemFileCreationFail`, `FilesystemFileWriteFail` or `FilesystemFileOverwriteForbidded`
 pub fn write_file(file_path: &Path, file_content: &str, existing_file_policy: &ExistingFilePolicy)  -> PomResult<()>  {
     if file_path.exists() {
@@ -530,7 +529,7 @@ mod tests{
             fs::write(src_root.join("a/file1.txt"), "one").unwrap();
             fs::write(src_root.join("a/b/file2.txt"), "two").unwrap();
 
-            let n = copy_files(src_root, dst_root, ExistingFilePolicy::Overwrite, CopyPolicy::PlainFilesOnly).unwrap();
+            let n = copy_files(src_root, dst_root, ExistingFilePolicy::Overwrite, &None).unwrap();
             assert_eq!(n, 3);
 
             assert_eq!(read_to_string(&dst_root.join("root.txt")), "root");
@@ -546,7 +545,7 @@ mod tests{
                 std::path::Path::new("this-path-should-not-exist-___"),
                 dst.path(),
                 ExistingFilePolicy::Overwrite,
-                // CopyPolicy::PlainFilesOnly,
+                &None,
             )
             .unwrap_err();
 
@@ -561,7 +560,7 @@ mod tests{
             let file = src.path().join("not_a_dir.txt");
             fs::write(&file, "x").unwrap();
 
-            let err = copy_files(&file, dst.path(), ExistingFilePolicy::Overwrite, CopyPolicy::PlainFilesOnly).unwrap_err();
+            let err = copy_files(&file, dst.path(), ExistingFilePolicy::Overwrite, &None).unwrap_err();
             assert_eq!(err.0, PomErrorCode::FilesystemCopySourceNotDir);
         }
 
@@ -575,7 +574,7 @@ mod tests{
             // Pre-create destination file with same relative path
             fs::write(dst.path().join("a.txt"), "DST").unwrap();
 
-            let err = copy_files(src.path(), dst.path(), ExistingFilePolicy::Fail, CopyPolicy::PlainFilesOnly).unwrap_err();
+            let err = copy_files(src.path(), dst.path(), ExistingFilePolicy::Fail, &None).unwrap_err();
             assert_eq!(err.0, PomErrorCode::FilesystemFileOverwriteForbidded);
         }
 
@@ -587,7 +586,7 @@ mod tests{
             fs::write(src.path().join("a.txt"), "NEW").unwrap();
             fs::write(dst.path().join("a.txt"), "OLD").unwrap();
 
-            let n = copy_files(src.path(), dst.path(), ExistingFilePolicy::Overwrite, CopyPolicy::PlainFilesOnly).unwrap();
+            let n = copy_files(src.path(), dst.path(), ExistingFilePolicy::Overwrite, &None).unwrap();
             assert_eq!(n, 1);
 
             let content = read_to_string(&dst.path().join("a.txt"));
@@ -604,7 +603,7 @@ mod tests{
             fs::write(src.path().join("real.txt"), "REAL").unwrap();
             symlink(src.path().join("real.txt"), src.path().join("link.txt")).unwrap();
 
-            let n = copy_files(src.path(), dst.path(), ExistingFilePolicy::Overwrite, CopyPolicy::PlainFilesOnly).unwrap();
+            let n = copy_files(src.path(), dst.path(), ExistingFilePolicy::Overwrite, &None).unwrap();
 
             // Only real.txt copied; link.txt should be skipped
             assert_eq!(n, 1);
@@ -627,7 +626,7 @@ mod tests{
             let dir = tempdir().unwrap();
             let p = dir.path().join("x.txt");
 
-            write_file(&p, "hello", ExistingFilePolicy::Overwrite).unwrap();
+            write_file(&p, "hello", &ExistingFilePolicy::Overwrite).unwrap();
             assert_eq!(read_to_string(&p), "hello");
         }
 
@@ -637,7 +636,7 @@ mod tests{
             let p = dir.path().join("x.txt");
 
             fs::write(&p, "0123456789").unwrap();
-            write_file(&p, "abc", ExistingFilePolicy::Overwrite).unwrap();
+            write_file(&p, "abc", &ExistingFilePolicy::Overwrite).unwrap();
 
             // truncate(true) should have removed old tail
             assert_eq!(read_to_string(&p), "abc");
@@ -649,7 +648,7 @@ mod tests{
             let p = dir.path().join("x.txt");
 
             fs::write(&p, "existing").unwrap();
-            let err = write_file(&p, "new", ExistingFilePolicy::Fail).unwrap_err();
+            let err = write_file(&p, "new", &ExistingFilePolicy::Fail).unwrap_err();
 
             assert_eq!(err.0, PomErrorCode::FilesystemFileOverwriteForbidded);
         }

@@ -1,19 +1,11 @@
 use std::path::{PathBuf, Path};
-use std::collections::HashMap;
-use serde::Serialize;
 
 use crate::errors::{PomErrorCode, PomResult};
 use crate::filesystem::{create_directories, copy_files, write_file, ExistingFilePolicy};
 use crate::cli::resolution::{resolve_project_name, resolve_project_target, resolve_project_root};
-use crate::project_layout::{resolve_project_layout, DoxygenGroup, ModuleLevelSpec};
+use crate::project_layout::{resolve_project_layout, DoxygenGroup, /*ModuleLevelSpec*/};
 use crate::template_rendering::{TemplateFields, FieldKey};
-
-
-#[derive(Debug, Serialize)]
-struct PomToml<'a> {
-    pub levels: &'a HashMap<String, ModuleLevelSpec>,
-    // Add other project data to save here
-}
+use crate::project_toml::{create_pom_toml_file};
 
 
 pub fn project_create(
@@ -25,7 +17,7 @@ pub fn project_create(
 
     // Resolve user parameters
     let project_root = resolve_project_root(project_root_parameter)?;
-    let (project_name, project_name_normalized) = resolve_project_name(project_name_parameter)?;
+    let (project_name, project_name_normalized, _) = resolve_project_name(project_name_parameter)?;
     let project_root = project_root.join(&project_name_normalized);
 
     let project_target = resolve_project_target(project_target_parameter)?;
@@ -102,23 +94,6 @@ fn create_doc_groups_file(project_root: &Path, groups_list: &[DoxygenGroup]) -> 
     }
 
     write_file(&doc_groups_file_path, &doc_groups_file_content, &ExistingFilePolicy::Fail)
-}
-
-
-fn create_pom_toml_file(project_root: &Path, module_levels_list: &HashMap<String, ModuleLevelSpec>) -> PomResult<()> {
-    let pom_toml_file_path = project_root.join("pom.toml");
-
-    let pom_toml = PomToml {
-        levels: module_levels_list,
-    };
-    let pom_toml_file_content = toml::to_string_pretty(&pom_toml).map_err(
-        |err| (
-            PomErrorCode::PomTomlFileSerializationFail,
-            Some(err.to_string())
-        )
-    )?;
-
-    write_file(&pom_toml_file_path, &pom_toml_file_content, &ExistingFilePolicy::Fail)
 }
 
 
