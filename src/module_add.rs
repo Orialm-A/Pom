@@ -124,3 +124,73 @@ fn create_module_files(module_name: &str, source_path: &Path, module_path: &Path
     }
     Ok(())
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+    use std::fs;
+
+    #[test]
+    fn validate_module_template_dir_err_not_found() {
+        let dir = tempdir().unwrap();
+        let missing = dir.path().join("nope");
+        let err = validate_module_template_dir(&missing).unwrap_err();
+        assert_eq!(err.0, PomErrorCode::ModuleTemplateSourceNotFound);
+    }
+
+    #[test]
+    fn validate_module_template_dir_err_not_dir() {
+        let dir = tempdir().unwrap();
+        let file = dir.path().join("file");
+        fs::write(&file, "x").unwrap();
+
+        let err = validate_module_template_dir(&file).unwrap_err();
+        assert_eq!(err.0, PomErrorCode::ModuleTemplateSourceNotDir);
+    }
+
+    #[test]
+    fn validate_module_template_dir_err_missing_templates() {
+        let dir = tempdir().unwrap();
+        let root = dir.path();
+
+        // directory exists but missing required template files
+        let err = validate_module_template_dir(root).unwrap_err();
+        assert_eq!(err.0, PomErrorCode::ModuleTemplateMissing);
+    }
+
+    #[test]
+    fn validate_module_template_dir_ok() {
+        let dir = tempdir().unwrap();
+        let root = dir.path();
+
+        fs::write(root.join("template.c.pomrt"), "C").unwrap();
+        fs::write(root.join("template.h.pomrt"), "H").unwrap();
+
+        let res = validate_module_template_dir(root);
+        assert!(res.is_ok(), "expected Ok(()), got {:?}", res);
+    }
+
+    #[test]
+    fn create_module_files_creates_c_and_h() {
+        let templates = tempdir().unwrap();
+        let out = tempdir().unwrap();
+
+        fs::write(templates.path().join("template.c.pomrt"), "C FILE").unwrap();
+        fs::write(templates.path().join("template.h.pomrt"), "H FILE").unwrap();
+
+        let fields = TemplateFields::new(); // no placeholders needed for this test
+
+        create_module_files("my_module", templates.path(), out.path(), &fields).unwrap();
+
+        let c = out.path().join("my_module.c");
+        let h = out.path().join("my_module.h");
+
+        assert!(c.is_file());
+        assert!(h.is_file());
+
+        assert_eq!(fs::read_to_string(c).unwrap(), "C FILE");
+        assert_eq!(fs::read_to_string(h).unwrap(), "H FILE");
+    }
+}
