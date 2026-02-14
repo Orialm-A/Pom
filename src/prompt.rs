@@ -14,12 +14,13 @@ use crate::project_layout::{ModuleLevelsMap, ModuleLevelSpec};
 /// Prompt the user for a string if the passed one is `None`
 ///
 /// May error `PomErrorCode::PromptStringFail`
-pub fn prompt_if_missing_string(optional_string: Option<String>, prompt_hint: &str) -> PomResult<String> {
+pub fn prompt_if_missing_string(optional_string: Option<String>, prompt_hint: &str, empty_string_allowed: bool) -> PomResult<String> {
     match optional_string {
         Some(optional_string) => Ok(optional_string),
         None => {
             let prompted_string: String = Input::with_theme(&ColorfulTheme::default())
                 .with_prompt(prompt_hint)
+                .allow_empty(empty_string_allowed)
                 .interact_text()
                 .map_err(|e| (PomErrorCode::PromptStringFail, Some(e.to_string())))?;
             Ok(prompted_string)

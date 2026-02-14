@@ -28,7 +28,7 @@ pub fn resolve_new_module_name(module_name_parameter: Option<String>, module_pre
 
 fn resolve_new_name(original_name: Option<String>, prompt_hint: &str) -> PomResult<(String, String, String)> {
     // `original_name` is the name as typed by user (with whitespaces, emojis...)
-    let original_name = prompt_if_missing_string(original_name, prompt_hint)?;
+    let original_name = prompt_if_missing_string(original_name, prompt_hint, false)?;
 
     // `normalized_name` is to be used in paths
     let normalized_name = slugify_snake(&original_name);
@@ -148,13 +148,13 @@ fn validate_project_root(project_root: &Path) -> PomResult<()> {
 
 
 pub fn resolve_module_brief(parameter_brief: Option<String>) -> PomResult<String> {
-    let brief = prompt_if_missing_string(parameter_brief, "Module brief for Doxygen (Press enter to leave empty)")?;
+    let brief = prompt_if_missing_string(parameter_brief, "Module brief for Doxygen (Press enter to leave empty)", true)?;
     Ok(brief.trim().to_string())
 }
 
 
 pub fn resolve_module_details(parameter_details: Option<String>) -> PomResult<String> {
-    let details = prompt_if_missing_string(parameter_details, "Module details for Doxygen (Press enter to leave empty)")?;
+    let details = prompt_if_missing_string(parameter_details, "Module details for Doxygen (Press enter to leave empty)", true)?;
     Ok(details.trim().to_string())
 }
 
