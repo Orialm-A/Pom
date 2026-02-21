@@ -2,14 +2,13 @@
 //!
 //! This module handles `pom.toml` file in projects
 
-use crate::errors::{PomResult, PomErrorCode};
-use std::path::{Path};
-use serde::{Serialize, Deserialize};
-use std::collections::HashMap;
+use crate::errors::{PomErrorCode, PomResult};
+use crate::filesystem::{ExistingFilePolicy, write_file};
 use crate::project_layout::{ModuleLevelSpec, ModuleLevelsMap};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
-use crate::filesystem::{write_file, ExistingFilePolicy};
-
+use std::path::Path;
 
 /// Intermediary structure to serialize / deserialize the content of `pom.toml` for a project
 #[derive(Debug, Serialize, Deserialize)]
@@ -18,11 +17,9 @@ pub struct PomToml {
     // Add other project data to save here
 }
 
-
 /// Check the presence of project `pom.toml` and return its content
 /// May error
 pub fn resolve_project_toml(project_root: &Path) -> PomResult<PomToml> {
-
     if !project_root.is_dir() {
         return Err((
             PomErrorCode::PathToProjectRootExistsAndNotDir,
@@ -50,9 +47,9 @@ pub fn resolve_project_toml(project_root: &Path) -> PomResult<PomToml> {
         Ok(pom_toml_str) => pom_toml_str,
         Err(src) => {
             return Err((
-            PomErrorCode::PomTomlFileCantOpen,
-            Some(format!("{}.\r\n{}", pom_toml_path.display().to_string(), src.to_string())),
-        ));
+                PomErrorCode::PomTomlFileCantOpen,
+                Some(format!("{}.\r\n{}", pom_toml_path.display(), src)),
+            ));
         }
     };
 
@@ -62,30 +59,35 @@ pub fn resolve_project_toml(project_root: &Path) -> PomResult<PomToml> {
             return Err((
                 PomErrorCode::PomTomlFileDeserializationFail,
                 Some(src.to_string()),
-            ))
+            ));
         }
     };
 
     Ok(pom_toml)
 }
 
-
-pub fn create_pom_toml_file(project_root: &Path, module_levels_list: &HashMap<String, ModuleLevelSpec>) -> PomResult<()> {
+pub fn create_pom_toml_file(
+    project_root: &Path,
+    module_levels_list: &HashMap<String, ModuleLevelSpec>,
+) -> PomResult<()> {
     let pom_toml_file_path = project_root.join("pom.toml");
 
     let pom_toml = PomToml {
         levels: module_levels_list.clone(),
     };
-    let pom_toml_file_content = toml::to_string_pretty(&pom_toml).map_err(
-        |err| (
+    let pom_toml_file_content = toml::to_string_pretty(&pom_toml).map_err(|err| {
+        (
             PomErrorCode::PomTomlFileSerializationFail,
-            Some(err.to_string())
+            Some(err.to_string()),
         )
-    )?;
+    })?;
 
-    write_file(&pom_toml_file_path, &pom_toml_file_content, &ExistingFilePolicy::Fail)
+    write_file(
+        &pom_toml_file_path,
+        &pom_toml_file_content,
+        &ExistingFilePolicy::Fail,
+    )
 }
-
 
 #[cfg(test)]
 mod tests {
