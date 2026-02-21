@@ -13,6 +13,7 @@ use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Deserialize)]
+/// Describe an entry in the project layout, used to generate file tree and files
 struct GenerationLayoutEntry {
     pub path: String,
     pub defgroup: Option<String>,

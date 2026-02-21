@@ -3,6 +3,7 @@ use regex::Regex;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+/// Describe the keys available in the `TemplateFields` hash map
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FieldKey {
     ProjectName,
@@ -16,6 +17,10 @@ pub enum FieldKey {
 }
 
 impl FieldKey {
+    /// Associate a key (variant from `FieldKey`) to a string
+    ///
+    /// The associated strings are the ones to be used in files with template for Pom
+    /// to know what data is expected there.
     pub fn from_str(candidate: &str) -> Option<Self> {
         Some(match candidate {
             "project_name" => FieldKey::ProjectName,
@@ -31,6 +36,9 @@ impl FieldKey {
     }
 }
 
+/// Maps the rendering fields with their value
+///
+/// A wrapper for a HasMap, to implement a specific `get_rendered_template_dest()`
 pub struct TemplateFields {
     values: HashMap<FieldKey, String>,
 }
@@ -56,6 +64,7 @@ impl TemplateFields {
     }
 }
 
+/// Return the expected name of a rendered file for a template, or None if it's not a template
 pub fn get_rendered_template_dest(file_path: &Path) -> Option<PathBuf> {
     // Check extension
     if file_path.extension()? != "pomrt" {
@@ -69,6 +78,9 @@ pub fn get_rendered_template_dest(file_path: &Path) -> Option<PathBuf> {
     Some(stripped)
 }
 
+/// Replace the fields of a template with appropriate content
+///
+/// Unknown fields are ignored and let in place
 pub fn render_template(template_content: &str, fields: &TemplateFields) -> String {
     // With Regex crate, Putting parenthesis around a litteral make it a group in the captured
     // string, accessible in an iterator starting at 1. (0 is for the full captured string.)

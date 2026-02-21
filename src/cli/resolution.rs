@@ -9,12 +9,14 @@ use std::env;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
+/// Resolve project name passed by parameter in the CLI
 pub fn resolve_project_name(
     project_name_parameter: Option<String>,
 ) -> PomResult<(String, String, String)> {
     resolve_new_name(project_name_parameter, "Project name")
 }
 
+/// Resolve new module name passed by parameter in the CLI
 pub fn resolve_new_module_name(
     module_name_parameter: Option<String>,
     module_prefix: &Option<String>,
@@ -50,6 +52,7 @@ fn resolve_new_name(
     Ok((original_name, normalized_name, upper_normalized_name))
 }
 
+/// Resolve project target passed by parameter in the CLI
 pub fn resolve_project_target(project_target_parameter: Option<String>) -> PomResult<PathBuf> {
     const DEFAULT_SOURCE: &str = "assets/target";
     let target_files_sources: [&str; 1] = [DEFAULT_SOURCE];
@@ -106,6 +109,7 @@ pub fn resolve_project_target(project_target_parameter: Option<String>) -> PomRe
     select_target(&available_targets)
 }
 
+/// Resolve project root passed by parameter in the CLI
 pub fn resolve_project_root(project_root_parameter: Option<PathBuf>) -> PomResult<PathBuf> {
     // Path in environment variable is tested first to return early (dev highest priority)
     match env::var("POM_DEV_TEST_PROJECT") {
@@ -157,6 +161,7 @@ fn validate_project_root(project_root: &Path) -> PomResult<()> {
     Ok(())
 }
 
+/// Resolve module brief passed by parameter in the CLI for Doxygen header
 pub fn resolve_module_brief(parameter_brief: Option<String>) -> PomResult<String> {
     let brief = prompt_if_missing_string(
         parameter_brief,
@@ -166,6 +171,7 @@ pub fn resolve_module_brief(parameter_brief: Option<String>) -> PomResult<String
     Ok(brief.trim().to_string())
 }
 
+/// Resolve module details passed by parameter in the CLI for Doxygen header
 pub fn resolve_module_details(parameter_details: Option<String>) -> PomResult<String> {
     let details = prompt_if_missing_string(
         parameter_details,
@@ -175,6 +181,7 @@ pub fn resolve_module_details(parameter_details: Option<String>) -> PomResult<St
     Ok(details.trim().to_string())
 }
 
+/// Resolve module level passed by parameter in the CLI for Doxygen group and file location
 pub fn resolve_module_level(
     level_parameter: Option<String>,
     project_levels_map: &ModuleLevelsMap,

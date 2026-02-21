@@ -7,6 +7,7 @@ use crate::project_layout::{DoxygenGroup /*ModuleLevelSpec*/, resolve_project_la
 use crate::project_toml::create_pom_toml_file;
 use crate::template_rendering::{FieldKey, TemplateFields};
 
+/// Main function to create a project
 pub fn project_create(
     project_name_parameter: Option<String>,
     project_root_parameter: Option<PathBuf>,
