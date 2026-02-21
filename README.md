@@ -1,5 +1,9 @@
 # Pom
 
+![License](https://img.shields.io/github/license/Orialm-A/Pom)
+
+![CI](https://github.com/Orialm-A/Pom/actions/workflows/ci.yml/badge.svg)
+
 **Pom** is a small CLI tool to scaffold and organize embedded C projects.
 
 It focuses on **structure, layering and long-term maintainability** rather than flashy automation.
