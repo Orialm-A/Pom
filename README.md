@@ -83,3 +83,8 @@ Because:
 - Good structure at day 0 prevents pain at month 6
 - Bash scripts I used for this previously are not easily scalable
 
+-----
+
+## License
+
+Pom is licensed under the MIT License. See `LICENSE` for details.
