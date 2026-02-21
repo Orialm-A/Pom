@@ -12,7 +12,7 @@ use owo_colors::OwoColorize;
 /// an optional String for details.
 pub type PomResult<T> = Result<T, (PomErrorCode, Option<String>)>;
 
-#[repr(i32)]  // `u8` more pertinent but would need a cast for `std::process::exit(code: i32)`
+#[repr(i32)] // `u8` more pertinent but would need a cast for `std::process::exit(code: i32)`
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// Represents all the error codes
 pub enum PomErrorCode {
@@ -61,7 +61,6 @@ pub enum PomErrorCode {
     ModuleTemplateMissing = 73,
     ModuleDestinationDirNotFound = 74,
     ModuleDestinationDirNotDir = 75,
-
 }
 
 impl PomErrorCode {
@@ -72,19 +71,31 @@ impl PomErrorCode {
     const fn error_message(self) -> &'static str {
         match self {
             Self::PathToProjectRootEmpty => "Project path is empty or whitespace.",
-            Self::PathToProjectRootInPomSource => "Project path is in Pom's source directory. Export `POM_DEV_TEST_PROJECT`.",
+            Self::PathToProjectRootInPomSource => {
+                "Project path is in Pom's source directory. Export `POM_DEV_TEST_PROJECT`."
+            }
             Self::PathToProjectRootCantGetCurrentDir => "Could not get the current directory.",
-            Self::PathToProjectRootEnvVarNotUnicode => "Env var `POM_DEV_TEST_PROJECT` contains non-Unicode characters.",
+            Self::PathToProjectRootEnvVarNotUnicode => {
+                "Env var `POM_DEV_TEST_PROJECT` contains non-Unicode characters."
+            }
             Self::PathToProjectRootNotEmpty => "Project path already exists and is not empty.",
             Self::PathToProjectRootFailedToReadDir => "Project path exists but could not be read.",
             Self::PathToProjectRootExistsAndNotDir => "Project path exists but is not a directory.",
-            Self::PathToProjectRootFailedToCreateRoot => "Failed to create the project root due to an OS error.",
+            Self::PathToProjectRootFailedToCreateRoot => {
+                "Failed to create the project root due to an OS error."
+            }
 
             // Generation layout file errors
-            Self::GenerationLayoutFileCantOpen => "Generation layout file was found but could not be opened.",
-            Self::GenerationLayoutFileCantRead => "Generation layout file was found but could not be read.",
+            Self::GenerationLayoutFileCantOpen => {
+                "Generation layout file was found but could not be opened."
+            }
+            Self::GenerationLayoutFileCantRead => {
+                "Generation layout file was found but could not be read."
+            }
             Self::GenerationLayoutFileCouldNotFindAny => "Generation layout file was not found.",
-            Self::GenerationLayoutFileInvalidEntryPath => "Generation layout file has an invalid `path` field.",
+            Self::GenerationLayoutFileInvalidEntryPath => {
+                "Generation layout file has an invalid `path` field."
+            }
 
             // Filesystem errors
             Self::FilesystemDirCreationFail => "Failed to create directory.",
@@ -97,7 +108,9 @@ impl PomErrorCode {
             Self::FilesystemCopySourceMissing => "Copy source is missing.",
             Self::FilesystemCopySourceNotDir => "Copy source is not a directory.",
             Self::FilesystemCopyFail => "Copy failed.",
-            Self::FilesystemFileOverwriteForbidded => "File copy or creation failed because overwrite is forbidden by policy.",
+            Self::FilesystemFileOverwriteForbidded => {
+                "File copy or creation failed because overwrite is forbidden by policy."
+            }
 
             // Prompt errors
             Self::PromptSelectionFail => "Failed to prompt for menu item selection.",
@@ -122,7 +135,6 @@ impl PomErrorCode {
 
             // Fallback
             _ => "Internal: A non-critical error was handled as fatal. This is a Pom bug.",
-
         }
     }
 

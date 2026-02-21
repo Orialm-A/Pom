@@ -3,14 +3,12 @@
 //! This module is responsible for wraping interaction with the system OS Filesystem
 //! API (`std::fs`). It handles verification and error interpretation for file copy, creation, for directory walking...
 
-use std::path::{PathBuf, Path};
 use crate::errors::{PomErrorCode, PomResult};
+use crate::template_rendering::{TemplateFields, get_rendered_template_dest, render_template};
 use std::fs::{self, OpenOptions};
 use std::io::Write;
+use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
-use crate::template_rendering::{get_rendered_template_dest, render_template, TemplateFields};
-
-
 
 pub mod path_list {
     //! path_list module
@@ -18,8 +16,7 @@ pub mod path_list {
     //! This module defines the trait `PathList`, to handle some functions to accept a
     //! sole Path / PathBuf or a collection.
 
-    use std::path::{PathBuf, Path};
-
+    use std::path::{Path, PathBuf};
 
     pub trait PathList {
         // Learning notes: We define a trait = a list of methods a type must provide
@@ -49,42 +46,39 @@ pub mod path_list {
         //         and ensure it can't outlive `self`."
     }
 
-
     impl PathList for Path {
         fn iter_paths(&self) -> Box<dyn Iterator<Item = &Path> + '_> {
             Box::new(std::iter::once(self))
         }
     }
 
-
     impl PathList for PathBuf {
         fn iter_paths(&self) -> Box<dyn Iterator<Item = &Path> + '_> {
-            Box::new(  // Placed on the heap so it can be returned by reference
-                std::iter::once(  // An iterator that yields exactly one element
-                    self.as_path() // A borrowed view of `self`
-                )
+            Box::new(
+                // Placed on the heap so it can be returned by reference
+                std::iter::once(
+                    // An iterator that yields exactly one element
+                    self.as_path(), // A borrowed view of `self`
+                ),
             )
         }
     }
 
-
     impl PathList for [PathBuf] {
         fn iter_paths(&self) -> Box<dyn Iterator<Item = &Path> + '_> {
             Box::new(
-                self.iter()  // `self` is `[PathBuf]`, we take an iterator over references to its elements
-                .map(|p| p.as_path()))  // Transforms ("maps") each item (`|p|`) of this iterator into something else. Here: `&Path`s
+                self.iter() // `self` is `[PathBuf]`, we take an iterator over references to its elements
+                    .map(|p| p.as_path()),
+            ) // Transforms ("maps") each item (`|p|`) of this iterator into something else. Here: `&Path`s
         }
     }
-
 
     impl PathList for Vec<PathBuf> {
         fn iter_paths(&self) -> Box<dyn Iterator<Item = &Path> + '_> {
             self.as_slice().iter_paths()
         }
     }
-
 }
-
 
 #[derive(Debug, PartialEq)]
 /// Reperesents the type of a `WalkDir::EntryDir`
@@ -94,7 +88,6 @@ pub enum EntryKind {
     Symlink,
 }
 
-
 #[derive(Debug)]
 /// Represents the data extracted from a `WalkDir::EntryDir` after validation
 pub struct ValidatedEntry {
@@ -103,14 +96,17 @@ pub struct ValidatedEntry {
     pub kind: EntryKind,
 }
 
-
 /// Represents the action to take when a file write or copy conflicts with an existing file
 #[derive(PartialEq)]
 pub enum ExistingFilePolicy {
-    // Overwrite,  // Cancel "unused" warning for now - make it available during unit tests
+    #[allow(dead_code)]
+    // `Overwrite` is intentionally defined even if not currently constructed
+    // in the main binary. Its behavior is already implemented and tested,
+    // and it will be used in a future revision.
+    // The allow prevents premature removal while keeping `-D warnings` strict.
+    Overwrite,
     Fail,
 }
-
 
 /// Create directories passed by reference
 ///
@@ -121,32 +117,28 @@ pub fn create_directories(dirs_paths: &(impl path_list::PathList + ?Sized)) -> P
     // Read parameter type as "A reference to a type implementing `PathList`"
     for dir_path in dirs_paths.iter_paths() {
         match fs::create_dir_all(dir_path) {
-            Ok(()) => { continue },
+            Ok(()) => continue,
             Err(src) => {
-                let details = format!("{}: {:?}",dir_path.display(), src);
-                return Err((
-                    PomErrorCode::FilesystemDirCreationFail,
-                    Some(details),
-                ));
+                let details = format!("{}: {:?}", dir_path.display(), src);
+                return Err((PomErrorCode::FilesystemDirCreationFail, Some(details)));
             }
         };
     }
     Ok(())
 }
 
-
 /// Check if an entry gave by `WalkDir::new().into_iter()` is valid
 ///
 /// May error `PomErrorCode::FilesystemStripPathPrefixFail`
-pub fn validate_dir_entry(entry: Result<walkdir::DirEntry, walkdir::Error>, source_root: &Path) -> PomResult<ValidatedEntry> {
+pub fn validate_dir_entry(
+    entry: Result<walkdir::DirEntry, walkdir::Error>,
+    source_root: &Path,
+) -> PomResult<ValidatedEntry> {
     let entry = match entry {
         Ok(entry) => entry,
         Err(src) => {
-            return Err((
-                PomErrorCode::FilesystemEntryInvalid,
-                Some(src.to_string()),
-            ));
-        },
+            return Err((PomErrorCode::FilesystemEntryInvalid, Some(src.to_string())));
+        }
     };
 
     let full_path = entry.path();
@@ -178,26 +170,30 @@ pub fn validate_dir_entry(entry: Result<walkdir::DirEntry, walkdir::Error>, sour
     Ok(ValidatedEntry {
         full_path: full_path.to_path_buf(),
         relative_path: relative_path.to_path_buf(),
-        kind: kind,
+        kind,
     })
 }
-
 
 /// Copy files contained in a directory from a source to a destination
 ///
 /// Create required sub directories to respect the source file tree
 /// May error `PomErrorCode::FilesystemFileOverwriteForbidded` or `FilesystemCopyFail`
-pub fn copy_files(source_root: &Path, destination_root: &Path, existing_file_policy: ExistingFilePolicy, fields: &Option<TemplateFields>) -> PomResult<usize> {
+pub fn copy_files(
+    source_root: &Path,
+    destination_root: &Path,
+    existing_file_policy: ExistingFilePolicy,
+    fields: &Option<TemplateFields>,
+) -> PomResult<usize> {
     if !source_root.exists() {
         return Err((
             PomErrorCode::FilesystemCopySourceMissing,
-            Some(source_root.display().to_string())
+            Some(source_root.display().to_string()),
         ));
     }
     if !source_root.is_dir() {
         return Err((
             PomErrorCode::FilesystemCopySourceNotDir,
-            Some(source_root.display().to_string())
+            Some(source_root.display().to_string()),
         ));
     }
 
@@ -218,67 +214,68 @@ pub fn copy_files(source_root: &Path, destination_root: &Path, existing_file_pol
                     continue; // root itself
                 }
                 create_directories(&destination_path)?;
-            },
+            }
             EntryKind::Symlink => {
-                println!("WARNING: `{}` is a symlink. It is not supported by pom current version.", entry_relative_path.display());
+                println!(
+                    "WARNING: `{}` is a symlink. It is not supported by pom current version.",
+                    entry_relative_path.display()
+                );
                 continue;
                 // Doesn't justify an error
-            },
+            }
             EntryKind::File => {
-                if destination_path.exists() {
-                    if existing_file_policy == ExistingFilePolicy::Fail {
-                        return Err((
-                            PomErrorCode::FilesystemFileOverwriteForbidded,
-                            Some(format!("`{}` already exists.", destination_path.display())),
-                        ));
-
-                    }
+                if destination_path.exists() && existing_file_policy == ExistingFilePolicy::Fail {
+                    return Err((
+                        PomErrorCode::FilesystemFileOverwriteForbidded,
+                        Some(format!("`{}` already exists.", destination_path.display())),
+                    ));
                 }
 
-                if let Some(rendered_destination_path) = get_rendered_template_dest(&destination_path){
+                if let Some(rendered_destination_path) =
+                    get_rendered_template_dest(&destination_path)
+                {
                     if let Some(extracted_fields) = fields {
-                        copy_count+= copy_with_rendering_helper(&entry_full_path,
-                                                                &rendered_destination_path,
-                                                                extracted_fields,
-                                                                &existing_file_policy
-                                                                )?;
+                        copy_count += copy_with_rendering_helper(
+                            &entry_full_path,
+                            &rendered_destination_path,
+                            extracted_fields,
+                            &existing_file_policy,
+                        )?;
                     }
                 } else {
                     copy_count += plain_copy_helper(&entry_full_path, &destination_path)?;
                 }
-            },
+            }
         };
     }
 
     Ok(copy_count)
 }
 
-
 fn plain_copy_helper(entry_path: &Path, destination_path: &Path) -> PomResult<usize> {
-    match fs::copy(&entry_path, &destination_path) {
-        Ok(_) => { return Ok(1); }
-        Err(src) => {
-            return Err((
-                PomErrorCode::FilesystemCopyFail,
-                Some(format!("{}: {}", entry_path.display(), src)),
-            ));
-        }
+    match fs::copy(entry_path, destination_path) {
+        Ok(_) => Ok(1),
+        Err(src) => Err((
+            PomErrorCode::FilesystemCopyFail,
+            Some(format!("{}: {}", entry_path.display(), src)),
+        )),
     }
 }
-
 
 pub fn copy_with_rendering_helper(
     entry_path: &Path,
     destination_path: &Path,
     fields: &TemplateFields,
-    existing_file_policy: &ExistingFilePolicy
+    existing_file_policy: &ExistingFilePolicy,
 ) -> PomResult<usize> {
     let template_content = match std::fs::read_to_string(entry_path) {
         Ok(template_content) => template_content,
-        Err(src) => { return Err((
-            PomErrorCode::FilesystemFileReadFail,
-            Some(format!("{}: {}", entry_path.display(), src))
-        ));},
+        Err(src) => {
+            return Err((
+                PomErrorCode::FilesystemFileReadFail,
+                Some(format!("{}: {}", entry_path.display(), src)),
+            ));
+        }
     };
 
     let rendered_content = render_template(&template_content, fields);
@@ -288,46 +285,44 @@ pub fn copy_with_rendering_helper(
     Ok(1)
 }
 
-
 /// Write a file
 ///
 /// May error `PomErrorCode::FilesystemFileCreationFail`, `FilesystemFileWriteFail` or `FilesystemFileOverwriteForbidded`
-pub fn write_file(file_path: &Path, file_content: &str, existing_file_policy: &ExistingFilePolicy)  -> PomResult<()>  {
-    if file_path.exists() {
-        if *existing_file_policy == ExistingFilePolicy::Fail {
-            return Err((
-                PomErrorCode::FilesystemFileOverwriteForbidded,
-                Some(format!("`{}` already exists.", file_path.display())),
-            ));
-
-        }
+pub fn write_file(
+    file_path: &Path,
+    file_content: &str,
+    existing_file_policy: &ExistingFilePolicy,
+) -> PomResult<()> {
+    if file_path.exists() && *existing_file_policy == ExistingFilePolicy::Fail {
+        return Err((
+            PomErrorCode::FilesystemFileOverwriteForbidded,
+            Some(format!("`{}` already exists.", file_path.display())),
+        ));
     }
 
     let mut file = OpenOptions::new()
         .write(true)
         .create(true)
         .truncate(true) // <-- THIS erases previous content
-        .open(&file_path)
-        .map_err(|e| (PomErrorCode::FilesystemFileCreationFail, Some(e.to_string())))?;
+        .open(file_path)
+        .map_err(|e| {
+            (
+                PomErrorCode::FilesystemFileCreationFail,
+                Some(e.to_string()),
+            )
+        })?;
 
-    match file.write_all(file_content.as_bytes()){
-        Ok(()) => { Ok(()) }
-        Err(src) => {
-            Err((
-                PomErrorCode::FilesystemFileWriteFail,
-                Some(src.to_string()),
-            ))
-        }
+    match file.write_all(file_content.as_bytes()) {
+        Ok(()) => Ok(()),
+        Err(src) => Err((PomErrorCode::FilesystemFileWriteFail, Some(src.to_string()))),
     }
 }
 
-
-
 #[cfg(test)]
-mod tests{
+mod tests {
     use super::*;
-    use tempfile::tempdir;
     use std::io::Read;
+    use tempfile::tempdir;
 
     mod subdirs_creation {
         use super::*;
@@ -376,9 +371,7 @@ mod tests{
             // Create a file "src" so "src/app" cannot become a directory
             File::create(project_root.join("src")).unwrap();
 
-            let dirs = vec![
-                project_root.join("src/app"),
-            ];
+            let dirs = vec![project_root.join("src/app")];
 
             let err = create_directories(&dirs).unwrap_err();
             assert_eq!(err.0, PomErrorCode::FilesystemDirCreationFail);
@@ -412,7 +405,10 @@ mod tests{
             let validated = validate_dir_entry(entry, src_root).unwrap();
 
             assert_eq!(validated.full_path, file_path);
-            assert_eq!(validated.relative_path, std::path::PathBuf::from("a/b/hello.txt"));
+            assert_eq!(
+                validated.relative_path,
+                std::path::PathBuf::from("a/b/hello.txt")
+            );
             assert!(matches!(validated.kind, EntryKind::File));
         }
 
@@ -436,7 +432,10 @@ mod tests{
             let validated = validate_dir_entry(entry, src_root).unwrap();
 
             assert_eq!(validated.full_path, nested);
-            assert_eq!(validated.relative_path, std::path::PathBuf::from("dir1/dir2"));
+            assert_eq!(
+                validated.relative_path,
+                std::path::PathBuf::from("dir1/dir2")
+            );
             assert!(matches!(validated.kind, EntryKind::Directory));
         }
 
@@ -504,7 +503,6 @@ mod tests{
             assert_eq!(err.0, PomErrorCode::FilesystemUnsupportedEntryType);
             assert!(err.1.unwrap().contains("myfifo"));
         }
-
     }
 
     mod copy_files_tests {
@@ -560,7 +558,8 @@ mod tests{
             let file = src.path().join("not_a_dir.txt");
             fs::write(&file, "x").unwrap();
 
-            let err = copy_files(&file, dst.path(), ExistingFilePolicy::Overwrite, &None).unwrap_err();
+            let err =
+                copy_files(&file, dst.path(), ExistingFilePolicy::Overwrite, &None).unwrap_err();
             assert_eq!(err.0, PomErrorCode::FilesystemCopySourceNotDir);
         }
 
@@ -574,7 +573,8 @@ mod tests{
             // Pre-create destination file with same relative path
             fs::write(dst.path().join("a.txt"), "DST").unwrap();
 
-            let err = copy_files(src.path(), dst.path(), ExistingFilePolicy::Fail, &None).unwrap_err();
+            let err =
+                copy_files(src.path(), dst.path(), ExistingFilePolicy::Fail, &None).unwrap_err();
             assert_eq!(err.0, PomErrorCode::FilesystemFileOverwriteForbidded);
         }
 
@@ -586,7 +586,8 @@ mod tests{
             fs::write(src.path().join("a.txt"), "NEW").unwrap();
             fs::write(dst.path().join("a.txt"), "OLD").unwrap();
 
-            let n = copy_files(src.path(), dst.path(), ExistingFilePolicy::Overwrite, &None).unwrap();
+            let n =
+                copy_files(src.path(), dst.path(), ExistingFilePolicy::Overwrite, &None).unwrap();
             assert_eq!(n, 1);
 
             let content = read_to_string(&dst.path().join("a.txt"));
@@ -603,7 +604,8 @@ mod tests{
             fs::write(src.path().join("real.txt"), "REAL").unwrap();
             symlink(src.path().join("real.txt"), src.path().join("link.txt")).unwrap();
 
-            let n = copy_files(src.path(), dst.path(), ExistingFilePolicy::Overwrite, &None).unwrap();
+            let n =
+                copy_files(src.path(), dst.path(), ExistingFilePolicy::Overwrite, &None).unwrap();
 
             // Only real.txt copied; link.txt should be skipped
             assert_eq!(n, 1);

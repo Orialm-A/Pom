@@ -1,6 +1,4 @@
-use crate::errors::{PomResult};
-
-
+use crate::errors::PomResult;
 
 pub fn project_rename_function(_new_name: Option<String>) -> PomResult<()> {
     eprintln!("`pom project rename` - not implemented yet");
@@ -12,9 +10,10 @@ pub fn project_config_function() -> PomResult<()> {
     Ok(())
 }
 
-
-
-pub fn module_rename_function(_old_module_name: Option<String>, _new_module_name: Option<String>) -> PomResult<()> {
+pub fn module_rename_function(
+    _old_module_name: Option<String>,
+    _new_module_name: Option<String>,
+) -> PomResult<()> {
     eprintln!("`pom module rename` - not implemented yet");
     Ok(())
 }

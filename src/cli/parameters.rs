@@ -1,7 +1,6 @@
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
-
 #[derive(Parser, Debug)]
 #[command(name = "pom")]
 pub struct Cli {
@@ -50,7 +49,7 @@ pub enum ProjectCommands {
         #[arg(short, long, value_name = "TARGET")]
         target: Option<String>,
         /// Print what would be done without creating / modifying files
-        #[arg(short = 'n', long, )]
+        #[arg(short = 'n', long)]
         dry_run: bool,
     },
     /// Rename the current project. Fail if current directory is not a pom project
@@ -75,13 +74,13 @@ pub enum ModuleCommands {
         #[arg(short, long, value_name = "DETAILS")]
         details: Option<String>,
         /// Print what would be done without creating / modifying files
-        #[arg(short = 'n', long, )]
+        #[arg(short = 'n', long)]
         dry_run: bool,
     },
     /// Rename a module (old and new name will be prompted of omitted)
     Rename {
         old_module_name: Option<String>,
-        new_module_name: Option<String>
+        new_module_name: Option<String>,
     },
     /// Remove a module (name will be prompted of omitted)
     Remove { module_name: Option<String> },

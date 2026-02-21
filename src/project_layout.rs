@@ -3,15 +3,14 @@
 //! This module is responsible for accessing the project layout file and extracting/formating all the
 //! pertinent info to create a project
 
-use serde::Deserialize;
-use std::fs;
 use crate::errors::{PomErrorCode, PomResult};
-use std::io::ErrorKind;
-use std::path::{PathBuf, Path};
+use convert_case::{Case, Casing};
+use serde::Deserialize;
 use serde::Serialize;
 use std::collections::HashMap;
-use convert_case::{Case, Casing};
-
+use std::fs;
+use std::io::ErrorKind;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Deserialize)]
 struct GenerationLayoutEntry {
@@ -23,7 +22,6 @@ struct GenerationLayoutEntry {
     pub module_prefix: Option<String>,
 }
 
-
 #[derive(Debug)]
 /// Describe a Doxygen group to generate `doc_groups.h`
 pub struct DoxygenGroup {
@@ -32,7 +30,6 @@ pub struct DoxygenGroup {
     pub brief: Option<String>,
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 /// Describe a module specs for `pom module create`
 pub struct ModuleLevelSpec {
@@ -40,10 +37,8 @@ pub struct ModuleLevelSpec {
     pub prefix: Option<String>,
 }
 
-
 /// Represents the map of levels name and spec
 pub type ModuleLevelsMap = HashMap<String, ModuleLevelSpec>;
-
 
 /// Represents the data extracted from the project layout
 pub struct ResolvedProjectLayout {
@@ -52,14 +47,13 @@ pub struct ResolvedProjectLayout {
     pub module_levels: HashMap<String, ModuleLevelSpec>,
 }
 
-
 #[derive(Debug, Deserialize)]
-struct TomlOutput { dir: Vec<GenerationLayoutEntry> }
-
+struct TomlOutput {
+    dir: Vec<GenerationLayoutEntry>,
+}
 
 /// Resolve project layout for project creation
 pub fn resolve_project_layout(project_root: &Path) -> PomResult<ResolvedProjectLayout> {
-
     let generation_layout = get_generation_layout()?;
 
     let mut subdirs_list: Vec<PathBuf> = Vec::new();
@@ -68,14 +62,12 @@ pub fn resolve_project_layout(project_root: &Path) -> PomResult<ResolvedProjectL
     let mut module_levels_map: HashMap<String, ModuleLevelSpec> = HashMap::new();
 
     for generation_layout_entry in generation_layout {
-
         let subdir_full_path: PathBuf = project_root.join(&generation_layout_entry.path);
-
 
         let dir_name = get_dir_name(&subdir_full_path)?;
         // names_list.push(dir_name.to_string());
 
-        if let Some(group) = get_doxygen_group(&generation_layout_entry, &dir_name) {
+        if let Some(group) = get_doxygen_group(&generation_layout_entry, dir_name) {
             doxygen_groups_list.push(group);
         }
 
@@ -86,7 +78,7 @@ pub fn resolve_project_layout(project_root: &Path) -> PomResult<ResolvedProjectL
         subdirs_list.push(subdir_full_path);
     }
 
-    Ok( ResolvedProjectLayout{
+    Ok(ResolvedProjectLayout {
         dirs: subdirs_list,
         // names: names_list,
         doxygen_groups: doxygen_groups_list,
@@ -94,11 +86,10 @@ pub fn resolve_project_layout(project_root: &Path) -> PomResult<ResolvedProjectL
     })
 }
 
-
 fn get_dir_name(path: &Path) -> PomResult<&str> {
     let dir_name_opt = path
         .components()
-        .last()
+        .next_back() // Prefer this to `.next()` when using a double ended iterator. `.next()` iterates over all the collection
         .and_then(|c| c.as_os_str().to_str());
 
     match dir_name_opt {
@@ -110,7 +101,6 @@ fn get_dir_name(path: &Path) -> PomResult<&str> {
     }
 }
 
-
 fn get_generation_layout() -> PomResult<Vec<GenerationLayoutEntry>> {
     let generation_layout_sources: Vec<&str> = vec![
         // Later: add higher priority config files here
@@ -121,9 +111,13 @@ fn get_generation_layout() -> PomResult<Vec<GenerationLayoutEntry>> {
 
     for generation_layout_source in generation_layout_sources {
         match get_generation_layout_from_file(generation_layout_source) {
-            Ok(extracted_generation_layout) => {  // Shadowing doesn't work there
+            Ok(extracted_generation_layout) => {
+                // Shadowing doesn't work there
                 generation_layout = Some(extracted_generation_layout);
-                println!("Start project generation using {}...", generation_layout_source);
+                println!(
+                    "Start project generation using {}...",
+                    generation_layout_source
+                );
                 break; // stop at first valid source
             }
             Err((PomErrorCode::GenerationLayoutFileCandidateNotFound, _)) => {
@@ -134,43 +128,39 @@ fn get_generation_layout() -> PomResult<Vec<GenerationLayoutEntry>> {
     }
 
     match generation_layout {
-        None => Err((
-            PomErrorCode::GenerationLayoutFileCouldNotFindAny,
-            None,
-        )),
+        None => Err((PomErrorCode::GenerationLayoutFileCouldNotFindAny, None)),
         Some(generation_layout) => Ok(generation_layout.dir),
     }
 }
 
-
 fn get_generation_layout_from_file(generation_layout_file_path: &str) -> PomResult<TomlOutput> {
-
     let generation_layout_str = match fs::read_to_string(generation_layout_file_path) {
         Ok(generation_layout_str) => generation_layout_str,
         Err(src) => {
             return match src.kind() {
-                ErrorKind::NotFound => Err((PomErrorCode::GenerationLayoutFileCandidateNotFound, None)),
+                ErrorKind::NotFound => {
+                    Err((PomErrorCode::GenerationLayoutFileCandidateNotFound, None))
+                }
                 _ => Err((
                     PomErrorCode::GenerationLayoutFileCantOpen,
-                    Some(src.to_string())  // `src` type is `Error` which implement `Display`
+                    Some(src.to_string()), // `src` type is `Error` which implement `Display`
                 )),
             };
         }
     };
 
-    let generation_layout: TomlOutput = match toml::from_str(&generation_layout_str){
-        Ok(generation_layout) => { generation_layout },
+    let generation_layout: TomlOutput = match toml::from_str(&generation_layout_str) {
+        Ok(generation_layout) => generation_layout,
         Err(src) => {
             return Err((
                 PomErrorCode::GenerationLayoutFileCantRead,
-                Some(src.to_string())  // `src` type is `Error` which implement `Display`
+                Some(src.to_string()), // `src` type is `Error` which implement `Display`
             ));
-        },
+        }
     };
 
     Ok(generation_layout)
 }
-
 
 fn get_doxygen_group(dir: &GenerationLayoutEntry, dir_name: &str) -> Option<DoxygenGroup> {
     if dir.defgroup.is_none() && dir.brief.is_none() {
@@ -184,19 +174,21 @@ fn get_doxygen_group(dir: &GenerationLayoutEntry, dir_name: &str) -> Option<Doxy
     })
 }
 
-
-fn get_module_level_spec(generation_layout_entry: &GenerationLayoutEntry) -> Option<ModuleLevelSpec> {
+fn get_module_level_spec(
+    generation_layout_entry: &GenerationLayoutEntry,
+) -> Option<ModuleLevelSpec> {
     if generation_layout_entry.contains_modules {
         Some(ModuleLevelSpec {
             path: generation_layout_entry.path.to_string(),
             prefix: generation_layout_entry.module_prefix.clone(),
         })
-    } else { None }
+    } else {
+        None
+    }
 }
 
-
 #[cfg(test)]
-mod tests{
+mod tests {
     use super::*;
 
     mod dir_name_extraction {
@@ -223,7 +215,6 @@ mod tests{
             assert_eq!(err.0, PomErrorCode::GenerationLayoutFileInvalidEntryPath);
         }
     }
-
 
     mod doxygen_groups_generation {
         use super::*;

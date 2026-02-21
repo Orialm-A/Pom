@@ -2,3 +2,5 @@ target/
 *.kate-swp
 notebook_development.md
 debug
+justfile
+rustfmt.toml

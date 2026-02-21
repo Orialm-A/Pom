@@ -1,25 +1,23 @@
 mod cli;
+mod errors;
+mod filesystem;
+mod module_add;
 mod pom_api;
 mod project_create;
-mod prompt;
-mod errors;
 mod project_layout;
-mod filesystem;
-mod template_rendering;
-mod module_add;
 mod project_toml;
+mod prompt;
+mod template_rendering;
 
-use clap::Parser;
-use crate::cli::parameters::TopLevelCommands::*;
-use crate::cli::parameters::ProjectCommands as Proj;
 use crate::cli::parameters::ModuleCommands as Mod;
+use crate::cli::parameters::ProjectCommands as Proj;
+use crate::cli::parameters::TopLevelCommands::*;
+use clap::Parser;
 
 // API
-use crate::project_create::project_create;
 use crate::module_add::module_add;
 use crate::pom_api as api;
-
-
+use crate::project_create::project_create;
 
 fn main() {
     let command_line = cli::parameters::Cli::parse().command;
@@ -30,7 +28,7 @@ fn main() {
                 project_name,
                 path,
                 target,
-                dry_run
+                dry_run,
             } => project_create(project_name, path, target, dry_run),
 
             Proj::Rename { new_project_name } => api::project_rename_function(new_project_name),
@@ -44,7 +42,10 @@ fn main() {
                 details,
                 dry_run,
             } => module_add(module_name, layer, brief, details, dry_run),
-            cli::parameters::ModuleCommands::Rename { old_module_name, new_module_name } => api::module_rename_function(old_module_name, new_module_name),
+            cli::parameters::ModuleCommands::Rename {
+                old_module_name,
+                new_module_name,
+            } => api::module_rename_function(old_module_name, new_module_name),
             Mod::Remove { module_name } => api::module_remove_function(module_name),
         },
         Clean => api::clean_function(),
@@ -56,7 +57,9 @@ fn main() {
     };
 
     match result {
-        Ok(()) => {},
-        Err((error_code, src)) => {error_code.handler(src.as_deref()); }
+        Ok(()) => {}
+        Err((error_code, src)) => {
+            error_code.handler(src.as_deref());
+        }
     }
 }
