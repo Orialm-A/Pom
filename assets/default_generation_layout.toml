@@ -20,19 +20,35 @@ module_prefix = "a"  # Optional prefix for files created in this module (e.g. a_
 
 
 [[dir]]
-path = "src/hld"
-defgroup = "High-Level Drivers"
-brief = "Hardware abstraction drivers for the project."
+path = "src/services"
+defgroup = "Services Layer"
+brief = "Services used by the application layer (e.g., controllers, filters, or device operations)."
 contains_modules = true
-module_prefix = "h"
+module_prefix = "s"
 
 
 [[dir]]
-path = "src/lld"
-defgroup = "Low-Level Drivers"
-brief = "Direct hardware access and register-level drivers."
+path = "src/devices"
+defgroup = "Devices layer"
+brief = "Device-specific feature implementations."
 contains_modules = true
-module_prefix = "l"
+module_prefix = "d"
+
+
+[[dir]]
+path = "src/peripherals"
+defgroup = "Peripherals"
+brief = "MCU peripherals abstraction layer."
+contains_modules = true
+module_prefix = "p"
+
+
+[[dir]]
+path = "src/bsp"
+defgroup = "Board Support Package"
+brief = "Target description"
+contains_modules = true
+module_prefix = "b"
 
 
 [[dir]]
@@ -49,6 +65,10 @@ defgroup = "Unit tests code"
 brief = "Unit-level tests validating individual components."
 contains_modules = true
 module_prefix = "u"
+
+
+[[dir]]
+path = "external"
 
 
 [[dir]]
