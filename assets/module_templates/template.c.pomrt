@@ -1,6 +1,6 @@
 /**
  *
- * @ingroup {{pom:module_doxygen_group}}
+ * {{pom:module_doxygen_group}}
  * @file
  * {{pom:module_doxygen_brief}}
  *
@@ -15,6 +15,7 @@
  * declared in the corresponding header is part of the public API. */
 
 // --- includes --------------------------------------
+#include "{{pom:module_name_normalized}}.h"
 
 // --- typedefs and structures -----------------------
 
