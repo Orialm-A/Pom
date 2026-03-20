@@ -24,10 +24,12 @@ pub fn resolve_new_module_name(
     let (_, mut normalized_module_name, mut header_guard) =
         resolve_new_name(module_name_parameter, "Module name")?;
 
+    header_guard = format!("{}_H", header_guard);
+
     if let Some(module_prefix) = module_prefix {
         normalized_module_name = format!("{}_{}", module_prefix, normalized_module_name);
         header_guard = format!(
-            "{}_{}_H",
+            "{}_{}",
             module_prefix.to_case(Case::Constant),
             header_guard
         );
