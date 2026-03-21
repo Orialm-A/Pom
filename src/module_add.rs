@@ -18,6 +18,7 @@ pub fn module_add(
     level: Option<String>,
     brief: Option<String>,
     details: Option<String>,
+    no_prefix: bool,
     dry_run: bool,
 ) -> PomResult<()> {
     // Check project
@@ -29,6 +30,8 @@ pub fn module_add(
         resolve_module_level(level, &project_toml.levels)?;
     let level_group = format!("@ingroup {}", level_group);
     let module_full_path = project_root.join(module_path);
+
+    let module_prefix = if no_prefix { None } else { module_prefix };
 
     let (module_name_normalized, module_header_guard) =
         resolve_new_module_name(module_name, &module_prefix)?;

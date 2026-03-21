@@ -73,6 +73,9 @@ pub enum ModuleCommands {
         /// Module documentation `@details`
         #[arg(short, long, value_name = "DETAILS")]
         details: Option<String>,
+        /// Create module files without the layer prefix
+        #[arg(long)]
+        no_prefix: bool,
         /// Print what would be done without creating / modifying files
         #[arg(short = 'n', long)]
         dry_run: bool,
