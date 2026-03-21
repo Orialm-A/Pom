@@ -2,6 +2,7 @@ mod cli;
 mod errors;
 mod filesystem;
 mod module_add;
+mod module_rename;
 mod pom_api;
 mod project_create;
 mod project_layout;
