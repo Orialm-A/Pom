@@ -24,13 +24,11 @@ pub fn resolve_new_module_name(
     let (_, mut normalized_module_name, mut header_guard) =
         resolve_new_name(module_name_parameter, "Module name")?;
 
+    header_guard = format!("{}_H", header_guard);
+
     if let Some(module_prefix) = module_prefix {
         normalized_module_name = format!("{}_{}", module_prefix, normalized_module_name);
-        header_guard = format!(
-            "{}_{}_H",
-            module_prefix.to_case(Case::Constant),
-            header_guard
-        );
+        header_guard = format!("{}_{}", module_prefix.to_case(Case::Constant), header_guard);
     }
 
     Ok((normalized_module_name, header_guard))
@@ -203,4 +201,48 @@ pub fn resolve_module_level(
         selected_level_spec.prefix.clone(),
         selected_level_name,
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_names_are_resolved() {
+        let result = resolve_new_name(Some("Test Name".to_string()), "Test Hint");
+        assert!(result.is_ok());
+
+        let (name, name_normalized, name_const_case) = result.unwrap();
+        assert_eq!(name, "Test Name".to_string());
+        assert_eq!(name_normalized, "test_name".to_string());
+        assert_eq!(name_const_case, "TEST_NAME".to_string());
+    }
+
+    #[test]
+    fn module_name_with_prefix() {
+        let result = resolve_new_module_name(Some("Test Name".to_string()), &Some("a".to_string()));
+        assert!(result.is_ok());
+
+        let (module_name, header_guard) = result.unwrap();
+
+        assert_eq!(module_name, "a_test_name".to_string());
+        assert_eq!(header_guard, "A_TEST_NAME_H".to_string());
+    }
+
+    #[test]
+    fn module_name_without_prefix() {
+        let result = resolve_new_module_name(Some("Test Name".to_string()), &None);
+        assert!(result.is_ok());
+
+        let (module_name, header_guard) = result.unwrap();
+
+        assert_eq!(module_name, "test_name".to_string());
+        assert_eq!(header_guard, "TEST_NAME_H".to_string());
+    }
+
+    #[test]
+    fn project_root_empty_rejected() {
+        let (error_code, _) = validate_project_root(Path::new("")).unwrap_err();
+        assert_eq!(error_code, PomErrorCode::PathToProjectRootEmpty);
+    }
 }

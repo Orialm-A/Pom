@@ -40,8 +40,9 @@ fn main() {
                 layer,
                 brief,
                 details,
+                no_prefix,
                 dry_run,
-            } => module_add(module_name, layer, brief, details, dry_run),
+            } => module_add(module_name, layer, brief, details, no_prefix, dry_run),
             cli::parameters::ModuleCommands::Rename {
                 old_module_name,
                 new_module_name,
