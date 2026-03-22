@@ -8,7 +8,7 @@ use crate::project_layout::{ModuleLevelSpec, ModuleLevelsMap};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
-use std::path::Path;
+use std::path::{Component, Path, PathBuf};
 
 /// Intermediary structure to serialize / deserialize the content of `pom.toml` for a project
 #[derive(Debug, Serialize, Deserialize)]
@@ -16,6 +16,7 @@ pub struct PomToml {
     pub levels: ModuleLevelsMap,
     // Add other project data to save here
 }
+
 
 /// Check the presence of project `pom.toml` and return its content
 /// May error
@@ -89,6 +90,37 @@ pub fn create_pom_toml_file(
     )
 }
 
+/// Check if a relative path is normal and return its first component
+///
+/// May error `PomErrorCode::PomTomlRelativePathNotNormal`
+fn first_component_of_normal_relative_path(path: &Path) -> PomResult<PathBuf> {
+    let mut components = path.components();
+
+    let first = match components.next() {
+        Some(Component::Normal(part)) => PathBuf::from(part),
+        _ => {
+            return Err((
+                PomErrorCode::PomTomlRelativePathNotNormal,
+                Some(path.display().to_string()),
+            ));
+        }
+    };
+
+    for component in components {
+        match component {
+            Component::Normal(_) => {}
+            _ => {
+                return Err((
+                    PomErrorCode::PomTomlRelativePathNotNormal,
+                    Some(path.display().to_string()),
+                ));
+            }
+        }
+    }
+
+    Ok(first)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -108,6 +140,10 @@ prefix = "h"
 [levels.lld]
 path = "src/lld"
 prefix = "l"
+
+[levels.unit_tests]
+path = "unit_tests"
+prefix = "u"
 "#
         .to_string()
     }
@@ -163,5 +199,31 @@ prefix = "l"
 
         let err = resolve_project_toml(&file_path).unwrap_err();
         assert_eq!(err.0, PomErrorCode::PathToProjectRootExistsAndNotDir);
+    }
+
+    mod realtive_paths_validation {
+        use super::*;
+
+        #[test]
+        fn extract_first_component() {
+            let test_path = Path::new("this/is/a/path");
+            let first_component = first_component_of_normal_relative_path(test_path).unwrap();
+            assert_eq!(first_component, Path::new("this").to_path_buf());
+
+            let test_path = Path::new("this");
+            let first_component = first_component_of_normal_relative_path(test_path).unwrap();
+            assert_eq!(first_component, Path::new("this").to_path_buf());
+        }
+
+        #[test]
+        fn reject_not_normal() {
+            let test_path = Path::new("/this/is/a/path/from/root");
+            let err = first_component_of_normal_relative_path(test_path).unwrap_err();
+            assert_eq!(err.0, PomErrorCode::PomTomlRelativePathNotNormal);
+
+            let test_path = Path::new("../this/is/a/path/with/parent");
+            let err = first_component_of_normal_relative_path(test_path).unwrap_err();
+            assert_eq!(err.0, PomErrorCode::PomTomlRelativePathNotNormal);
+        }
     }
 }
