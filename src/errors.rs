@@ -52,8 +52,7 @@ pub enum PomErrorCode {
     PomTomlNotFound = 52,
     PomTomlNotFile = 53,
     PomTomlFileCantOpen = 54,
-    PomTomlContainsRoot = 55,
-    PomTomlRelativePathNotNormal = 56,
+    PomTomlLevelPathNotNormal = 56,
     // Assets errors: 6x
     FileTemplateMissing = 60,
     // Module templates: 7x
@@ -124,7 +123,7 @@ impl PomErrorCode {
             Self::PomTomlNotFound => "Can't found `pom.toml`.",
             Self::PomTomlNotFile => "`pom.toml` found but is not a file.",
             Self::PomTomlFileCantOpen => "`pom.toml` was found but could not be opened.",
-            Self::PomTomlRelativePathNotNormal => "`pom.toml` contains a path with root, or `./`, or `../`. The only vaalid path format is `a/b/c`.",
+            Self::PomTomlLevelPathNotNormal => "`pom.toml` contains a level path with root, or `./`, or `../`. The only valid path format is `a/b/c`.",
 
             // Templates/assets
             Self::FileTemplateMissing => "File templates are missing from the default assets.",
