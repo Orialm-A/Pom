@@ -183,7 +183,7 @@ pub fn resolve_module_details(parameter_details: Option<String>) -> PomResult<St
 pub fn resolve_module_level(
     level_parameter: Option<String>,
     project_levels_map: &ModuleLevelsMap,
-) -> PomResult<(String, Option<String>, String)> {
+) -> PomResult<(PathBuf, Option<String>, String)> {
     if let Some(level_parameter) = level_parameter
         && let Some(level_spec) = project_levels_map.get(&level_parameter)
     {
