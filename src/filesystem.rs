@@ -9,12 +9,13 @@ use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
+use std::collections::{HashMap, HashSet};
 
 pub mod path_list {
     //! path_list module
     //!
-    //! This module defines the trait `PathList`, to handle some functions to accept a
-    //! sole Path / PathBuf or a collection.
+    //! This module defines the trait `PathList`, which allows functions to accept
+    //! either a single path or a collection of paths.
 
     use std::path::{Path, PathBuf};
 
@@ -107,6 +108,71 @@ pub enum ExistingFilePolicy {
     Overwrite,
     Fail,
 }
+
+/// Describe which files were found for a module in a given directory.
+///
+/// A module may be represented by:
+/// - a header file only (`<name>.h`)
+/// - a source file on
+#[derive(Debug, Eq, PartialEq)]
+struct ModulesFiles {
+    header_file: bool,
+    source_file: bool,
+}
+
+/// Store all module locations found while searching the project.
+///
+/// The key is the directory containing the module files, relative to the
+/// project root. The value indicates whether a header file and/or a source
+/// file was found there for the searched module name.
+#[derive(Debug, Eq, PartialEq)]
+pub struct ModulesFound {
+    modules: HashMap<PathBuf, ModulesFiles>,
+}
+
+impl ModulesFound {
+    /// Create an empty collection of found module files.
+    pub fn new() -> Self {
+        Self {
+            modules: HashMap::new(),
+        }
+    }
+
+    /// Mark that a header file was found for the module in `module_path`.
+    ///
+    /// If this module location was not registered yet, it is inserted first.
+    pub fn insert_header(&mut self, module_path: &Path) {
+        self.insert_module(module_path);
+        if let Some(reference) = self.modules.get_mut(module_path) {
+            reference.header_file = true;
+        }
+    }
+
+    /// Mark that a source file was found for the module in `module_path`.
+    ///
+    /// If this module location was not registered yet, it is inserted first.
+    pub fn insert_source(&mut self, module_path: &Path) {
+        self.insert_module(module_path);
+        if let Some(reference) = self.modules.get_mut(module_path) {
+            reference.source_file = true;
+        }
+    }
+
+
+    /// Insert a module location in the collection if it is not already present.
+    ///
+    /// Newly inserted entries are initialized with both file flags set to `false`.
+    fn insert_module(&mut self, module_path: &Path) {
+        if !self.modules.contains_key(module_path) {
+            let new_module = ModulesFiles {
+                header_file: false,
+                source_file: false,
+            };
+            self.modules.insert(module_path.to_path_buf(), new_module);
+        }
+    }
+}
+
 
 /// Create directories passed by reference
 ///
@@ -317,6 +383,59 @@ pub fn write_file(
         Err(src) => Err((PomErrorCode::FilesystemFileWriteFail, Some(src.to_string()))),
     }
 }
+
+/// Search for a module files in the project
+///
+/// May error `PomErrorCode::FilesystemEntryInvalid`
+pub fn search_module(
+    module_name: &str,
+    project_root: &Path,
+    search_scope: &HashSet<PathBuf>,
+) -> PomResult<ModulesFound> {
+
+    let header_name = format!("{}.h", &module_name);
+    let source_name = format!("{}.c", &module_name);
+
+    let mut found = ModulesFound::new();
+
+    for dir in search_scope {
+        let search_path = project_root.join(dir);
+        for entry in WalkDir::new(search_path).into_iter() {
+            let validated_entry = validate_dir_entry(entry, project_root)?;
+
+            let entry_relative_path = validated_entry.relative_path;
+            let entry_kind = validated_entry.kind;
+
+            match entry_kind {
+
+                EntryKind::Directory => {
+                    continue;
+                    // Sources may contain nested directories, we just want files
+                }
+                EntryKind::Symlink => {
+                    println!(
+                        "WARNING: `{}` is a symlink. It is not supported by pom current version.",
+                        entry_relative_path.display()
+                    );
+                    continue;
+                    // Doesn't justify an error
+                }
+                EntryKind::File => {
+                    let file_name = entry_relative_path.file_name();
+                    let module_location = entry_relative_path.parent().unwrap();
+
+                    if let Some(file_name) = file_name {
+                        if file_name == header_name.as_str() { found.insert_header(&module_location); }
+                        if file_name == source_name.as_str() { found.insert_source(&module_location); }
+                        }
+                    }
+                }
+            }
+        }
+    Ok(found)
+}
+
+
 
 #[cfg(test)]
 mod tests {
@@ -653,6 +772,57 @@ mod tests {
             let err = write_file(&p, "new", &ExistingFilePolicy::Fail).unwrap_err();
 
             assert_eq!(err.0, PomErrorCode::FilesystemFileOverwriteForbidded);
+        }
+    }
+
+    mod module_search_tests {
+        use super::*;
+
+
+        fn create_test_file_tree() -> (tempfile::TempDir, PathBuf) {
+            let temp_dir = tempdir().unwrap();
+            let project_root = temp_dir.path().join("project_root");
+
+            fs::create_dir(&project_root).unwrap();
+
+            fs::create_dir_all(project_root.join("src/services")).unwrap();
+            fs::create_dir_all(project_root.join("src/peripherals")).unwrap();
+            fs::create_dir_all(project_root.join("unit_tests")).unwrap();
+
+            fs::write(project_root.join("src/services/timer.h"), "").unwrap();
+            fs::write(project_root.join("src/services/timer.c"), "").unwrap();
+
+            fs::write(project_root.join("src/peripherals/timer.c"), "").unwrap();
+            fs::write(project_root.join("src/peripherals/tim.h"), "").unwrap();
+
+            fs::write(project_root.join("unit_tests/timer.h"), "").unwrap();
+            fs::write(project_root.join("unit_tests/tests_timer.c"), "").unwrap();
+
+            (temp_dir, project_root)
+        }
+
+        fn expected_timer_research_result() -> ModulesFound {
+
+            let mut expected = ModulesFound::new();
+            expected.insert_header(&PathBuf::from("src/services"));
+            expected.insert_source(&PathBuf::from("src/services"));
+            expected.insert_source(&PathBuf::from("src/peripherals"));
+            expected.insert_header(&PathBuf::from("unit_tests"));
+
+            expected
+        }
+
+        #[test]
+        fn search_module_files() {
+            let (_temp_dir, project_root) = create_test_file_tree();
+
+            let mut search_scope = HashSet::new();
+            search_scope.insert(PathBuf::from("src"));
+            search_scope.insert(PathBuf::from("unit_tests"));
+
+            let result = search_module("timer", &project_root, &search_scope).unwrap();
+
+            assert_eq!(result, expected_timer_research_result());
         }
     }
 }
