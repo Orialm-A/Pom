@@ -43,6 +43,7 @@ pub enum PomErrorCode {
     FilesystemCopySourceNotDir = 308,
     FilesystemCopyFail = 309,
     FilesystemFileOverwriteForbidded = 310,
+    FileSystemModuleSearchResultNotUnique = 311,
     // Prompt errors: 4x
     PromptSelectionFail = 40,
     PromptStringFail = 41,
@@ -62,6 +63,8 @@ pub enum PomErrorCode {
     ModuleTemplateMissing = 73,
     ModuleDestinationDirNotFound = 74,
     ModuleDestinationDirNotDir = 75,
+    // Module rename: 8x
+    ModuleRenameNotFound = 80,
 }
 
 impl PomErrorCode {
@@ -112,28 +115,36 @@ impl PomErrorCode {
             Self::FilesystemFileOverwriteForbidded => {
                 "File copy or creation failed because overwrite is forbidden by policy."
             }
+            Self::FileSystemModuleSearchResultNotUnique => {
+                "Tried to select a unique module location when several were available."
+            }
 
             // Prompt errors
             Self::PromptSelectionFail => "Failed to prompt for menu item selection.",
             Self::PromptStringFail => "Failed to prompt for input.",
 
-            // pom.toml
+            // pom.toml errors
             Self::PomTomlFileSerializationFail => "Failed to serialize `pom.toml` content.",
             Self::PomTomlFileDeserializationFail => "Failed to deserialize `pom.toml` content.",
-            Self::PomTomlNotFound => "Can't found `pom.toml`.",
+            Self::PomTomlNotFound => "Can't find `pom.toml`.",
             Self::PomTomlNotFile => "`pom.toml` found but is not a file.",
             Self::PomTomlFileCantOpen => "`pom.toml` was found but could not be opened.",
-            Self::PomTomlLevelPathNotNormal => "`pom.toml` contains a level path with root, or `./`, or `../`. The only valid path format is `a/b/c`.",
+            Self::PomTomlLevelPathNotNormal => {
+                "`pom.toml` contains a level path with root, or `./`, or `../`. The only valid path format is `a/b/c`."
+            }
 
-            // Templates/assets
+            // Assets errors
             Self::FileTemplateMissing => "File templates are missing from the default assets.",
 
-            //
+            // Module template errors
             Self::ModuleTemplateSourceNotDir => "Module tmplate source is not a directory.",
             Self::ModuleTemplateCouldNotFindAny => "Module template source was not found.",
             Self::ModuleTemplateMissing => "Module template is missing.",
             Self::ModuleDestinationDirNotFound => "Module destination does not exist.",
             Self::ModuleDestinationDirNotDir => "Module destination is not a directory.",
+
+            // Module rename errors
+            Self::ModuleRenameNotFound => "Did not found any module with this name.",
 
             // Fallback
             _ => "Internal: A non-critical error was handled as fatal. This is a Pom bug.",

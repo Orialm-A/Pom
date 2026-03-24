@@ -3,6 +3,7 @@
 //! Prompt user for missing information
 
 use crate::errors::{PomErrorCode, PomResult};
+use crate::filesystem::ModulesFound;
 use crate::project_layout::{ModuleLevelSpec, ModuleLevelsMap};
 use dialoguer::{Input, Select, theme::ColorfulTheme};
 use std::collections::HashMap;
@@ -75,7 +76,7 @@ pub fn select_target(available_targets: &HashMap<String, PathBuf>) -> PomResult<
         ));
     }
 
-    let selected_key = menu_helper(
+    let selected_key = menu_helper_deprecated(
         keys,
         "Typed target not found. Select one of the available targets",
     )?;
@@ -87,16 +88,23 @@ pub fn select_module_level(
     available_levels: &ModuleLevelsMap,
 ) -> PomResult<(ModuleLevelSpec, String)> {
     let keys: Vec<&String> = available_levels.keys().collect();
-    let selected_key = menu_helper(
+    let selected_key = menu_helper_deprecated(
         keys,
         "Typed level not found. Select one from availables in `pom.toml`",
     )?;
     Ok((available_levels[&selected_key].clone(), selected_key))
 }
 
-fn menu_helper(mut keys: Vec<&String>, prompt_hint: &str) -> PomResult<String> {
-    keys.sort();
+pub fn select_module(available_modules: &ModulesFound) -> PomResult<PathBuf> {
+    let keys: Vec<String> = available_modules.get_all_locations_as_text();
 
+    let selected_key = menu_helper(keys, "Several modules found. Select the correct location")?;
+
+    Ok(selected_key.into())
+}
+
+fn menu_helper_deprecated(mut keys: Vec<&String>, prompt_hint: &str) -> PomResult<String> {
+    keys.sort();
     let selection = Select::with_theme(&ColorfulTheme::default())
         .with_prompt(prompt_hint)
         .items(&keys)
@@ -105,6 +113,19 @@ fn menu_helper(mut keys: Vec<&String>, prompt_hint: &str) -> PomResult<String> {
         .map_err(|e| (PomErrorCode::PromptSelectionFail, Some(e.to_string())))?;
 
     Ok(keys[selection].clone())
+}
+
+fn menu_helper(mut items: Vec<String>, prompt_hint: &str) -> PomResult<String> {
+    items.sort();
+
+    let selection = Select::with_theme(&ColorfulTheme::default())
+        .with_prompt(prompt_hint)
+        .items(&items)
+        .default(0)
+        .interact()
+        .map_err(|e| (PomErrorCode::PromptSelectionFail, Some(e.to_string())))?;
+
+    Ok(items[selection].clone())
 }
 
 #[cfg(test)]

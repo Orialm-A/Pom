@@ -21,7 +21,7 @@ impl PomToml {
     /// Get the set of root directories of all levels path
     ///
     /// May error `PomErrorCode::PomTomlLevelPathNotNormal`
-    pub fn get_modules_roots (self) -> PomResult<HashSet<PathBuf>> {
+    pub fn get_modules_roots(self) -> PomResult<HashSet<PathBuf>> {
         let levels_iterator: Vec<&ModuleLevelSpec> = self.levels.values().collect();
         let mut module_roots_set = HashSet::new();
 
@@ -138,7 +138,6 @@ pub fn create_pom_toml_file(
     )
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -246,11 +245,9 @@ prefix = "u"
 
         #[test]
         fn extract_all_modules_roots() {
-
             let dir = tempdir().unwrap();
             let temp_project_dir = dir.path();
             let temp_project_toml_path = temp_project_dir.join("pom.toml");
-
 
             fs::write(&temp_project_toml_path, minimal_valid_pom_toml()).unwrap();
 

@@ -1,10 +1,12 @@
 use crate::errors::{PomErrorCode, PomResult};
-use crate::filesystem::{EntryKind, validate_dir_entry};
+use crate::filesystem::{EntryKind, search_module, validate_dir_entry};
 use crate::project_layout::ModuleLevelsMap;
-use crate::prompt::{prompt_if_missing_string, select_module_level, select_target, slugify_snake};
+use crate::prompt::{
+    prompt_if_missing_string, select_module, select_module_level, select_target, slugify_snake,
+};
 
 use convert_case::{Case, Casing};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
@@ -32,6 +34,37 @@ pub fn resolve_new_module_name(
     }
 
     Ok((normalized_module_name, header_guard))
+}
+
+/// Resolve old module name passed by parameter in the CLI
+pub fn resolve_old_module_name(
+    old_module_name_parameter: Option<String>,
+    project_root: &Path,
+    search_scope: &HashSet<PathBuf>,
+) -> PomResult<(PathBuf, String)> {
+    let (_, old_name_normalized, old_header_guard) = resolve_new_name(
+        old_module_name_parameter,
+        "Module old name (without file extension)",
+    )?;
+
+    let search_result = search_module(&old_name_normalized, project_root, search_scope)?;
+
+    let number_of_modules = search_result.get_number_of_modules();
+
+    let module_location: PathBuf;
+
+    if number_of_modules == 0 {
+        return Err((
+            PomErrorCode::ModuleRenameNotFound,
+            Some(old_name_normalized),
+        ));
+    } else if number_of_modules > 1 {
+        module_location = select_module(&search_result)?;
+    } else {
+        module_location = search_result.get_unique_location()?;
+    }
+
+    Ok((module_location, old_header_guard))
 }
 
 fn resolve_new_name(

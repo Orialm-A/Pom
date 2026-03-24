@@ -5,11 +5,11 @@
 
 use crate::errors::{PomErrorCode, PomResult};
 use crate::template_rendering::{TemplateFields, get_rendered_template_dest, render_template};
+use std::collections::{HashMap, HashSet};
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
-use std::collections::{HashMap, HashSet};
 
 pub mod path_list {
     //! path_list module
@@ -115,7 +115,7 @@ pub enum ExistingFilePolicy {
 /// - a header file only (`<name>.h`)
 /// - a source file on
 #[derive(Debug, Eq, PartialEq)]
-struct ModulesFiles {
+struct ModuleFiles {
     header_file: bool,
     source_file: bool,
 }
@@ -127,7 +127,7 @@ struct ModulesFiles {
 /// file was found there for the searched module name.
 #[derive(Debug, Eq, PartialEq)]
 pub struct ModulesFound {
-    modules: HashMap<PathBuf, ModulesFiles>,
+    modules: HashMap<PathBuf, ModuleFiles>,
 }
 
 impl ModulesFound {
@@ -158,21 +158,43 @@ impl ModulesFound {
         }
     }
 
-
     /// Insert a module location in the collection if it is not already present.
     ///
     /// Newly inserted entries are initialized with both file flags set to `false`.
     fn insert_module(&mut self, module_path: &Path) {
         if !self.modules.contains_key(module_path) {
-            let new_module = ModulesFiles {
+            let new_module = ModuleFiles {
                 header_file: false,
                 source_file: false,
             };
             self.modules.insert(module_path.to_path_buf(), new_module);
         }
     }
-}
 
+    /// Return the number of modules found
+    pub fn get_number_of_modules(&self) -> usize {
+        self.modules.len()
+    }
+
+    /// Return the unique module location, if there is exactly one
+    pub fn get_unique_location(&self) -> PomResult<PathBuf> {
+        if self.modules.len() != 1 {
+            return Err((PomErrorCode::FileSystemModuleSearchResultNotUnique, None));
+        }
+
+        Ok(self.modules.keys().next().unwrap().clone())
+    }
+
+    /// Return all the locations found as `Vec<String>`
+    ///
+    /// This is used for menu selection
+    pub fn get_all_locations_as_text(&self) -> Vec<String> {
+        self.modules
+            .keys()
+            .map(|path| path.display().to_string())
+            .collect()
+    }
+}
 
 /// Create directories passed by reference
 ///
@@ -392,7 +414,6 @@ pub fn search_module(
     project_root: &Path,
     search_scope: &HashSet<PathBuf>,
 ) -> PomResult<ModulesFound> {
-
     let header_name = format!("{}.h", &module_name);
     let source_name = format!("{}.c", &module_name);
 
@@ -407,7 +428,6 @@ pub fn search_module(
             let entry_kind = validated_entry.kind;
 
             match entry_kind {
-
                 EntryKind::Directory => {
                     continue;
                     // Sources may contain nested directories, we just want files
@@ -425,17 +445,19 @@ pub fn search_module(
                     let module_location = entry_relative_path.parent().unwrap();
 
                     if let Some(file_name) = file_name {
-                        if file_name == header_name.as_str() { found.insert_header(&module_location); }
-                        if file_name == source_name.as_str() { found.insert_source(&module_location); }
+                        if file_name == header_name.as_str() {
+                            found.insert_header(module_location);
+                        }
+                        if file_name == source_name.as_str() {
+                            found.insert_source(module_location);
                         }
                     }
                 }
             }
         }
+    }
     Ok(found)
 }
-
-
 
 #[cfg(test)]
 mod tests {
@@ -778,7 +800,6 @@ mod tests {
     mod module_search_tests {
         use super::*;
 
-
         fn create_test_file_tree() -> (tempfile::TempDir, PathBuf) {
             let temp_dir = tempdir().unwrap();
             let project_root = temp_dir.path().join("project_root");
@@ -802,7 +823,6 @@ mod tests {
         }
 
         fn expected_timer_research_result() -> ModulesFound {
-
             let mut expected = ModulesFound::new();
             expected.insert_header(&PathBuf::from("src/services"));
             expected.insert_source(&PathBuf::from("src/services"));
@@ -813,7 +833,7 @@ mod tests {
         }
 
         #[test]
-        fn search_module_files() {
+        fn find_all_modules_complete_or_not() {
             let (_temp_dir, project_root) = create_test_file_tree();
 
             let mut search_scope = HashSet::new();
@@ -823,6 +843,35 @@ mod tests {
             let result = search_module("timer", &project_root, &search_scope).unwrap();
 
             assert_eq!(result, expected_timer_research_result());
+        }
+
+        #[test]
+        fn count_number_of_modules_found() {
+            let search_result = expected_timer_research_result();
+            assert_eq!(search_result.get_number_of_modules(), 3);
+        }
+
+        #[test]
+        fn dont_select_unique_location_if_several_available() {
+            let search_result = expected_timer_research_result();
+            assert_eq!(
+                search_result.get_unique_location().unwrap_err().0,
+                PomErrorCode::FileSystemModuleSearchResultNotUnique
+            );
+        }
+
+        #[test]
+        fn correctly_get_all_locations_as_text() {
+            let search_result = expected_timer_research_result();
+            let mut locations = search_result.get_all_locations_as_text();
+            locations.sort();
+            let expected_locations: Vec<String> = Vec::from([
+                "src/peripherals".to_string(),
+                "src/services".to_string(),
+                "unit_tests".to_string(),
+            ]);
+
+            assert_eq!(locations, expected_locations);
         }
     }
 }
