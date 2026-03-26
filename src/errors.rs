@@ -44,6 +44,7 @@ pub enum PomErrorCode {
     FilesystemCopyFail = 309,
     FilesystemFileOverwriteForbidded = 310,
     FileSystemModuleSearchResultNotUnique = 311,
+    FileSystemModuleSearchResultKeyNotFound = 312,
     // Prompt errors: 4x
     PromptSelectionFail = 40,
     PromptStringFail = 41,
@@ -117,6 +118,9 @@ impl PomErrorCode {
             }
             Self::FileSystemModuleSearchResultNotUnique => {
                 "Tried to select a unique module location when several were available."
+            }
+            Self::FileSystemModuleSearchResultKeyNotFound => {
+                "Tried to select a module location despite none were available."
             }
 
             // Prompt errors

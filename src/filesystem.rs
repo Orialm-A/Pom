@@ -114,8 +114,8 @@ pub enum ExistingFilePolicy {
 /// A module may be represented by:
 /// - a header file only (`<name>.h`)
 /// - a source file on
-#[derive(Debug, Eq, PartialEq)]
-struct ModuleFiles {
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct ModuleFiles {
     header_file: bool,
     source_file: bool,
 }
@@ -193,6 +193,25 @@ impl ModulesFound {
             .keys()
             .map(|path| path.display().to_string())
             .collect()
+    }
+
+    /// Return the file presence information for a module at the given location.
+    ///
+    /// The `module_location` must correspond to one of the directories previously
+    /// recorded during the module search phase. If a matching entry is found,
+    /// this function returns a copy of the associated [`ModulesFiles`] structure,
+    /// indicating whether a header file and/or a source file was detected.
+    ///
+    /// # Errors
+    ///
+    /// Returns `PomErrorCode::FileSystemModuleSearchResultKeyNotFound` if the
+    /// provided `module_location` does not exist in the search results.
+    pub fn get_module_files(&self, module_location: &Path) -> PomResult<ModuleFiles> {
+        if let Some(module) = self.modules.get(module_location) {
+            Ok(module.clone())
+        } else {
+            Err((PomErrorCode::FileSystemModuleSearchResultKeyNotFound, None))
+        }
     }
 }
 

@@ -1,5 +1,5 @@
 use crate::errors::{PomErrorCode, PomResult};
-use crate::filesystem::{EntryKind, search_module, validate_dir_entry};
+use crate::filesystem::{EntryKind, ModuleFiles, search_module, validate_dir_entry};
 use crate::project_layout::ModuleLevelsMap;
 use crate::prompt::{
     prompt_if_missing_string, select_module, select_module_level, select_target, slugify_snake,
@@ -41,7 +41,7 @@ pub fn resolve_old_module_name(
     old_module_name_parameter: Option<String>,
     project_root: &Path,
     search_scope: &HashSet<PathBuf>,
-) -> PomResult<(PathBuf, String)> {
+) -> PomResult<(PathBuf, String, ModuleFiles)> {
     let (_, old_name_normalized, old_header_guard) = resolve_new_name(
         old_module_name_parameter,
         "Module old name (without file extension)",
@@ -63,8 +63,8 @@ pub fn resolve_old_module_name(
     } else {
         module_location = search_result.get_unique_location()?;
     }
-
-    Ok((module_location, old_header_guard))
+    let module_files = search_result.get_module_files(&module_location)?;
+    Ok((module_location, old_header_guard, module_files))
 }
 
 fn resolve_new_name(
