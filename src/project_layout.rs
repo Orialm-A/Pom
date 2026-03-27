@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, Deserialize)]
 /// Describe an entry in the project layout, used to generate file tree and files
 struct GenerationLayoutEntry {
-    pub path: String,
+    pub path: PathBuf,
     pub defgroup: Option<String>,
     pub brief: Option<String>,
     #[serde(default)]
@@ -34,7 +34,7 @@ pub struct DoxygenGroup {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 /// Describe a module specs for `pom module create`
 pub struct ModuleLevelSpec {
-    pub path: String, // Store paths relatively to project root to ensure portability across different computers (`git clone`)
+    pub path: PathBuf, // Store paths relatively to project root to ensure portability across different computers (`git clone`)
     pub prefix: Option<String>,
 }
 
@@ -180,7 +180,7 @@ fn get_module_level_spec(
 ) -> Option<ModuleLevelSpec> {
     if generation_layout_entry.contains_modules {
         Some(ModuleLevelSpec {
-            path: generation_layout_entry.path.to_string(),
+            path: generation_layout_entry.path.clone(),
             prefix: generation_layout_entry.module_prefix.clone(),
         })
     } else {

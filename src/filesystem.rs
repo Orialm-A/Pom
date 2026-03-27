@@ -5,6 +5,7 @@
 
 use crate::errors::{PomErrorCode, PomResult};
 use crate::template_rendering::{TemplateFields, get_rendered_template_dest, render_template};
+use std::collections::{HashMap, HashSet};
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -13,8 +14,8 @@ use walkdir::WalkDir;
 pub mod path_list {
     //! path_list module
     //!
-    //! This module defines the trait `PathList`, to handle some functions to accept a
-    //! sole Path / PathBuf or a collection.
+    //! This module defines the trait `PathList`, which allows functions to accept
+    //! either a single path or a collection of paths.
 
     use std::path::{Path, PathBuf};
 
@@ -106,6 +107,112 @@ pub enum ExistingFilePolicy {
     // The allow prevents premature removal while keeping `-D warnings` strict.
     Overwrite,
     Fail,
+}
+
+/// Describe which files were found for a module in a given directory.
+///
+/// A module may be represented by:
+/// - a header file only (`<name>.h`)
+/// - a source file on
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub struct ModuleFiles {
+    pub header_file: bool,
+    pub source_file: bool,
+}
+
+/// Store all module locations found while searching the project.
+///
+/// The key is the directory containing the module files, relative to the
+/// project root. The value indicates whether a header file and/or a source
+/// file was found there for the searched module name.
+#[derive(Debug, Eq, PartialEq)]
+pub struct ModulesFound {
+    modules: HashMap<PathBuf, ModuleFiles>,
+}
+
+impl ModulesFound {
+    /// Create an empty collection of found module files.
+    pub fn new() -> Self {
+        Self {
+            modules: HashMap::new(),
+        }
+    }
+
+    /// Mark that a header file was found for the module in `module_path`.
+    ///
+    /// If this module location was not registered yet, it is inserted first.
+    pub fn insert_header(&mut self, module_path: &Path) {
+        self.insert_module(module_path);
+        if let Some(reference) = self.modules.get_mut(module_path) {
+            reference.header_file = true;
+        }
+    }
+
+    /// Mark that a source file was found for the module in `module_path`.
+    ///
+    /// If this module location was not registered yet, it is inserted first.
+    pub fn insert_source(&mut self, module_path: &Path) {
+        self.insert_module(module_path);
+        if let Some(reference) = self.modules.get_mut(module_path) {
+            reference.source_file = true;
+        }
+    }
+
+    /// Insert a module location in the collection if it is not already present.
+    ///
+    /// Newly inserted entries are initialized with both file flags set to `false`.
+    fn insert_module(&mut self, module_path: &Path) {
+        if !self.modules.contains_key(module_path) {
+            let new_module = ModuleFiles {
+                header_file: false,
+                source_file: false,
+            };
+            self.modules.insert(module_path.to_path_buf(), new_module);
+        }
+    }
+
+    /// Return the number of modules found
+    pub fn get_number_of_modules(&self) -> usize {
+        self.modules.len()
+    }
+
+    /// Return the unique module location, if there is exactly one
+    pub fn get_unique_location(&self) -> PomResult<PathBuf> {
+        if self.modules.len() != 1 {
+            return Err((PomErrorCode::FileSystemModuleSearchResultNotUnique, None));
+        }
+
+        Ok(self.modules.keys().next().unwrap().clone())
+    }
+
+    /// Return all the locations found as `Vec<String>`
+    ///
+    /// This is used for menu selection
+    pub fn get_all_locations_as_text(&self) -> Vec<String> {
+        self.modules
+            .keys()
+            .map(|path| path.display().to_string())
+            .collect()
+    }
+
+    /// Return the file presence information for a module at the given location.
+    ///
+    /// The `module_location` must correspond to one of the directories previously
+    /// recorded during the module search phase. If a matching entry is found,
+    /// this function returns a copy of the associated [`ModulesFiles`] structure,
+    /// indicating whether a header file and/or a source file was detected.
+    ///
+    /// # Errors
+    ///
+    /// Returns `PomErrorCode::FileSystemModuleSearchResultKeyNotFound` if the
+    /// provided `module_location` does not exist in the search results.
+    pub fn get_module_files(&self, module_location: &Path) -> PomResult<ModuleFiles> {
+        if let Some(module) = self.modules.get(module_location) {
+            Ok(module.clone())
+        } else {
+            Err((PomErrorCode::FileSystemModuleSearchResultKeyNotFound, None))
+        }
+    }
 }
 
 /// Create directories passed by reference
@@ -316,6 +423,110 @@ pub fn write_file(
         Ok(()) => Ok(()),
         Err(src) => Err((PomErrorCode::FilesystemFileWriteFail, Some(src.to_string()))),
     }
+}
+
+/// Search for a module files in the project
+///
+/// May error `PomErrorCode::FilesystemEntryInvalid`
+pub fn search_module(
+    module_name: &str,
+    project_root: &Path,
+    search_scope: &HashSet<PathBuf>,
+) -> PomResult<ModulesFound> {
+    let header_name = format!("{}.h", &module_name);
+    let source_name = format!("{}.c", &module_name);
+
+    let mut found = ModulesFound::new();
+
+    for dir in search_scope {
+        let search_path = project_root.join(dir);
+        for entry in WalkDir::new(search_path).into_iter() {
+            let validated_entry = validate_dir_entry(entry, project_root)?;
+
+            let entry_relative_path = validated_entry.relative_path;
+            let entry_kind = validated_entry.kind;
+
+            match entry_kind {
+                EntryKind::Directory => {
+                    continue;
+                    // Sources may contain nested directories, we just want files
+                }
+                EntryKind::Symlink => {
+                    println!(
+                        "WARNING: `{}` is a symlink. It is not supported by pom current version.",
+                        entry_relative_path.display()
+                    );
+                    continue;
+                    // Doesn't justify an error
+                }
+                EntryKind::File => {
+                    let file_name = entry_relative_path.file_name();
+                    let module_location = entry_relative_path.parent().unwrap();
+
+                    if let Some(file_name) = file_name {
+                        if file_name == header_name.as_str() {
+                            found.insert_header(module_location);
+                        }
+                        if file_name == source_name.as_str() {
+                            found.insert_source(module_location);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(found)
+}
+
+pub fn rename_file(old_path: &Path, new_path: &Path) -> PomResult<()> {
+    if !old_path.exists() {
+        return Err((
+            PomErrorCode::FilesystemRenameOriginNotFound,
+            Some(format!("{}", old_path.display())),
+        ));
+    }
+
+    if new_path.exists() {
+        return Err((
+            PomErrorCode::FilesystemRenameDestinationExists,
+            Some(format!("{}", new_path.display())),
+        ));
+    }
+    fs::rename(old_path, new_path)
+        .map_err(|e| (PomErrorCode::FilesystemRenameFailed, Some(e.to_string())))?;
+
+    Ok(())
+}
+
+/// Read the content of a file.
+///
+/// Returns the file content as a `String`.
+///
+/// # Errors
+///
+/// Returns:
+/// - `PomErrorCode::FilesystemReadTargetNotFound` if the target does not exist
+/// - `PomErrorCode::FilesystemReadNotFile` if the target is not a file
+/// - `PomErrorCode::FilesystemReadFailed` if the file content cannot be read
+pub fn read_file(file_path: &Path) -> PomResult<String> {
+    if !file_path.exists() {
+        return Err((
+            PomErrorCode::FilesystemReadTargetNotFound,
+            Some(file_path.display().to_string()),
+        ));
+    }
+
+    if !file_path.is_file() {
+        return Err((
+            PomErrorCode::FilesystemReadNotFile,
+            Some(file_path.display().to_string()),
+        ));
+    }
+
+    let file_content = fs::read_to_string(file_path)
+        .map_err(|e| (PomErrorCode::FilesystemReadFailed, Some(e.to_string())))?;
+
+    Ok(file_content)
 }
 
 #[cfg(test)]
@@ -653,6 +864,195 @@ mod tests {
             let err = write_file(&p, "new", &ExistingFilePolicy::Fail).unwrap_err();
 
             assert_eq!(err.0, PomErrorCode::FilesystemFileOverwriteForbidded);
+        }
+    }
+
+    mod module_search_tests {
+        use super::*;
+
+        fn create_test_file_tree() -> (tempfile::TempDir, PathBuf) {
+            let temp_dir = tempdir().unwrap();
+            let project_root = temp_dir.path().join("project_root");
+
+            fs::create_dir(&project_root).unwrap();
+
+            fs::create_dir_all(project_root.join("src/services")).unwrap();
+            fs::create_dir_all(project_root.join("src/peripherals")).unwrap();
+            fs::create_dir_all(project_root.join("unit_tests")).unwrap();
+
+            fs::write(project_root.join("src/services/timer.h"), "").unwrap();
+            fs::write(project_root.join("src/services/timer.c"), "").unwrap();
+
+            fs::write(project_root.join("src/peripherals/timer.c"), "").unwrap();
+            fs::write(project_root.join("src/peripherals/tim.h"), "").unwrap();
+
+            fs::write(project_root.join("unit_tests/timer.h"), "").unwrap();
+            fs::write(project_root.join("unit_tests/tests_timer.c"), "").unwrap();
+
+            (temp_dir, project_root)
+        }
+
+        fn expected_timer_research_result() -> ModulesFound {
+            let mut expected = ModulesFound::new();
+            expected.insert_header(&PathBuf::from("src/services"));
+            expected.insert_source(&PathBuf::from("src/services"));
+            expected.insert_source(&PathBuf::from("src/peripherals"));
+            expected.insert_header(&PathBuf::from("unit_tests"));
+
+            expected
+        }
+
+        #[test]
+        fn find_all_modules_complete_or_not() {
+            let (_temp_dir, project_root) = create_test_file_tree();
+
+            let mut search_scope = HashSet::new();
+            search_scope.insert(PathBuf::from("src"));
+            search_scope.insert(PathBuf::from("unit_tests"));
+
+            let result = search_module("timer", &project_root, &search_scope).unwrap();
+
+            assert_eq!(result, expected_timer_research_result());
+        }
+
+        #[test]
+        fn count_number_of_modules_found() {
+            let search_result = expected_timer_research_result();
+            assert_eq!(search_result.get_number_of_modules(), 3);
+        }
+
+        #[test]
+        fn dont_select_unique_location_if_several_available() {
+            let search_result = expected_timer_research_result();
+            assert_eq!(
+                search_result.get_unique_location().unwrap_err().0,
+                PomErrorCode::FileSystemModuleSearchResultNotUnique
+            );
+        }
+
+        #[test]
+        fn correctly_get_all_locations_as_text() {
+            let search_result = expected_timer_research_result();
+            let mut locations = search_result.get_all_locations_as_text();
+            locations.sort();
+            let expected_locations: Vec<String> = Vec::from([
+                "src/peripherals".to_string(),
+                "src/services".to_string(),
+                "unit_tests".to_string(),
+            ]);
+
+            assert_eq!(locations, expected_locations);
+        }
+    }
+
+    mod file_rename_tests {
+        use super::*;
+
+        fn create_temp_files() -> (tempfile::TempDir, PathBuf, PathBuf, PathBuf) {
+            let temp_dir = tempdir().unwrap();
+            let test_root = temp_dir.path().join("project_root");
+
+            fs::create_dir(&test_root).unwrap();
+
+            let file_hello_world = test_root.join("hello_world.txt");
+            write_file(
+                &file_hello_world,
+                "Hello, World!",
+                &ExistingFilePolicy::Overwrite,
+            )
+            .unwrap();
+
+            let file_hello_rust = test_root.join("hello_rust.txt");
+            write_file(
+                &file_hello_rust,
+                "Hello, Rust!",
+                &ExistingFilePolicy::Overwrite,
+            )
+            .unwrap();
+
+            return (temp_dir, test_root, file_hello_world, file_hello_rust);
+        }
+
+        #[test]
+        fn reject_not_found_files() {
+            let (_temp_dir, test_root, _, file_hello_rust) = create_temp_files();
+
+            let wrong_file = test_root.join("wrong_file.txt");
+
+            let err = rename_file(&wrong_file, &file_hello_rust).unwrap_err();
+
+            assert_eq!(err.0, PomErrorCode::FilesystemRenameOriginNotFound);
+        }
+
+        #[test]
+        fn reject_existing_destination() {
+            let (_temp_dir, _, file_hello_world, file_hello_rust) = create_temp_files();
+            let err = rename_file(&file_hello_world, &file_hello_rust).unwrap_err();
+            assert_eq!(err.0, PomErrorCode::FilesystemRenameDestinationExists);
+        }
+
+        #[test]
+        fn rename_file_renames_file() {
+            let (_temp_dir, _test_root, file_hello_world, _) = create_temp_files();
+
+            let new_path = file_hello_world.with_file_name("hello_universe.txt");
+
+            rename_file(&file_hello_world, &new_path).unwrap();
+
+            assert!(!file_hello_world.exists());
+            assert!(new_path.exists());
+
+            let renamed_file_content = fs::read_to_string(&new_path).unwrap();
+
+            assert_eq!(renamed_file_content, String::from("Hello, World!"));
+        }
+    }
+
+    #[cfg(test)]
+    mod file_read_tests {
+        use super::*;
+        // use std::fs;
+        // use std::path::PathBuf;
+        use tempfile::{TempDir, tempdir};
+
+        fn create_temp_file() -> (TempDir, PathBuf) {
+            let temp_dir = tempdir().unwrap();
+            let file_path = temp_dir.path().join("hello.txt");
+
+            write_file(&file_path, "Hello, World!", &ExistingFilePolicy::Overwrite).unwrap();
+
+            (temp_dir, file_path)
+        }
+
+        #[test]
+        fn read_existing_file() {
+            let (_temp_dir, file_path) = create_temp_file();
+
+            let file_content = read_file(&file_path).unwrap();
+
+            assert_eq!(file_content, "Hello, World!");
+        }
+
+        #[test]
+        fn reject_not_found_target() {
+            let temp_dir = tempdir().unwrap();
+            let missing_file = temp_dir.path().join("missing.txt");
+
+            let err = read_file(&missing_file).unwrap_err();
+
+            assert_eq!(err.0, PomErrorCode::FilesystemReadTargetNotFound);
+        }
+
+        #[test]
+        fn reject_directory_target() {
+            let temp_dir = tempdir().unwrap();
+            let dir_path = temp_dir.path().join("my_dir");
+
+            fs::create_dir(&dir_path).unwrap();
+
+            let err = read_file(&dir_path).unwrap_err();
+
+            assert_eq!(err.0, PomErrorCode::FilesystemReadNotFile);
         }
     }
 }

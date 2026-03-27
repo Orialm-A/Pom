@@ -43,15 +43,25 @@ pub enum PomErrorCode {
     FilesystemCopySourceNotDir = 308,
     FilesystemCopyFail = 309,
     FilesystemFileOverwriteForbidded = 310,
+    FileSystemModuleSearchResultNotUnique = 311,
+    FileSystemModuleSearchResultKeyNotFound = 312,
+    FilesystemRenameOriginNotFound = 313,
+    FilesystemRenameDestinationExists = 314,
+    FilesystemRenameFailed = 315,
+    FilesystemReadTargetNotFound = 316,
+    FilesystemReadNotFile = 317,
+    FilesystemReadFailed = 318,
     // Prompt errors: 4x
     PromptSelectionFail = 40,
     PromptStringFail = 41,
+    PromptConfirmationFail = 42,
     // `pom.toml` file errors: 5x
     PomTomlFileSerializationFail = 50,
     PomTomlFileDeserializationFail = 51,
     PomTomlNotFound = 52,
     PomTomlNotFile = 53,
     PomTomlFileCantOpen = 54,
+    PomTomlLevelPathNotNormal = 56,
     // Assets errors: 6x
     FileTemplateMissing = 60,
     // Module templates: 7x
@@ -61,6 +71,8 @@ pub enum PomErrorCode {
     ModuleTemplateMissing = 73,
     ModuleDestinationDirNotFound = 74,
     ModuleDestinationDirNotDir = 75,
+    // Module rename: 8x
+    ModuleRenameNotFound = 80,
 }
 
 impl PomErrorCode {
@@ -111,27 +123,48 @@ impl PomErrorCode {
             Self::FilesystemFileOverwriteForbidded => {
                 "File copy or creation failed because overwrite is forbidden by policy."
             }
+            Self::FileSystemModuleSearchResultNotUnique => {
+                "Tried to select a unique module location when several were available."
+            }
+            Self::FileSystemModuleSearchResultKeyNotFound => {
+                "Tried to select a module location despite none were available."
+            }
+            Self::FilesystemRenameOriginNotFound => "Failed to find the file to rename.",
+            Self::FilesystemRenameDestinationExists => {
+                "A file already exists at the destination path."
+            }
+            Self::FilesystemRenameFailed => "Failed to rename a file.",
+            Self::FilesystemReadTargetNotFound => "Failed to find the file to read.",
+            Self::FilesystemReadNotFile => "Target to read is not a file.",
+            Self::FilesystemReadFailed => "Failed to read a file.",
 
             // Prompt errors
             Self::PromptSelectionFail => "Failed to prompt for menu item selection.",
             Self::PromptStringFail => "Failed to prompt for input.",
+            Self::PromptConfirmationFail => "Failed to prompt for confirmation.",
 
-            // pom.toml
+            // pom.toml errors
             Self::PomTomlFileSerializationFail => "Failed to serialize `pom.toml` content.",
             Self::PomTomlFileDeserializationFail => "Failed to deserialize `pom.toml` content.",
-            Self::PomTomlNotFound => "Can't found `pom.toml`.",
+            Self::PomTomlNotFound => "Can't find `pom.toml`.",
             Self::PomTomlNotFile => "`pom.toml` found but is not a file.",
             Self::PomTomlFileCantOpen => "`pom.toml` was found but could not be opened.",
+            Self::PomTomlLevelPathNotNormal => {
+                "`pom.toml` contains a level path with root, or `./`, or `../`. The only valid path format is `a/b/c`."
+            }
 
-            // Templates/assets
+            // Assets errors
             Self::FileTemplateMissing => "File templates are missing from the default assets.",
 
-            //
+            // Module template errors
             Self::ModuleTemplateSourceNotDir => "Module tmplate source is not a directory.",
             Self::ModuleTemplateCouldNotFindAny => "Module template source was not found.",
             Self::ModuleTemplateMissing => "Module template is missing.",
             Self::ModuleDestinationDirNotFound => "Module destination does not exist.",
             Self::ModuleDestinationDirNotDir => "Module destination is not a directory.",
+
+            // Module rename errors
+            Self::ModuleRenameNotFound => "Did not found any module with this name.",
 
             // Fallback
             _ => "Internal: A non-critical error was handled as fatal. This is a Pom bug.",

@@ -17,6 +17,7 @@ use clap::Parser;
 
 // API
 use crate::module_add::module_add;
+use crate::module_rename::module_rename;
 use crate::pom_api as api;
 use crate::project_create::project_create;
 
@@ -44,10 +45,13 @@ fn main() {
                 no_prefix,
                 dry_run,
             } => module_add(module_name, layer, brief, details, no_prefix, dry_run),
-            cli::parameters::ModuleCommands::Rename {
+
+            Mod::Rename {
                 old_module_name,
                 new_module_name,
-            } => api::module_rename_function(old_module_name, new_module_name),
+                skip_confirmation,
+            } => module_rename(old_module_name, new_module_name, skip_confirmation),
+
             Mod::Remove { module_name } => api::module_remove_function(module_name),
         },
         Clean => api::clean_function(),
