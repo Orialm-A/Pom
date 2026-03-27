@@ -27,6 +27,7 @@ struct ModuleRenameContext<'a> {
 pub fn module_rename(
     old_module_name: Option<String>,
     new_module_name: Option<String>,
+    skip_confirmation: bool,
 ) -> PomResult<()> {
     let project_root = resolve_project_root(None)?;
     let project_toml = resolve_project_toml(&project_root)?;
@@ -36,6 +37,7 @@ pub fn module_rename(
         resolve_old_module_name(old_module_name, &project_root, &sources_roots_set)?;
     let (new_module_name_normalized, new_header_guard) =
         resolve_new_module_name(new_module_name, &None)?;
+    let skip_confirmation = if skip_confirmation { Some(true) } else { None };
 
     let rename_context = ModuleRenameContext {
         project_root: &project_root,
@@ -48,7 +50,7 @@ pub fn module_rename(
         source_file: module_files.source_file,
     };
 
-    module_rename_flow(rename_context, None)?;
+    module_rename_flow(rename_context, skip_confirmation)?;
 
     Ok(())
 }

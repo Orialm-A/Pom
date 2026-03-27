@@ -49,7 +49,8 @@ fn main() {
             Mod::Rename {
                 old_module_name,
                 new_module_name,
-            } => module_rename(old_module_name, new_module_name),
+                skip_confirmation,
+            } => module_rename(old_module_name, new_module_name, skip_confirmation),
 
             Mod::Remove { module_name } => api::module_remove_function(module_name),
         },
