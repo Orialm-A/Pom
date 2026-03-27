@@ -498,6 +498,39 @@ pub fn rename_file(old_path: &Path, new_path: &Path) -> PomResult<()> {
     Ok(())
 }
 
+/// Read the content of a file.
+///
+/// Returns the file content as a `String`.
+///
+/// # Errors
+///
+/// Returns:
+/// - `PomErrorCode::FilesystemReadTargetNotFound` if the target does not exist
+/// - `PomErrorCode::FilesystemReadNotFile` if the target is not a file
+/// - `PomErrorCode::FilesystemReadFailed` if the file content cannot be read
+pub fn read_file(file_path: &Path) -> PomResult<String> {
+    if !file_path.exists() {
+        return Err((
+            PomErrorCode::FilesystemReadTargetNotFound,
+            Some(file_path.display().to_string()),
+        ))
+    }
+
+    if !file_path.is_file() {
+        return Err((
+            PomErrorCode::FilesystemReadNotFile,
+            Some(file_path.display().to_string()),
+        ))
+    }
+
+    let file_content = fs::read_to_string(file_path).map_err(|e| {(
+        PomErrorCode::FilesystemReadFailed,
+        Some(e.to_string()),
+    )})?;
+
+    Ok(file_content)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -974,6 +1007,54 @@ mod tests {
             let renamed_file_content = fs::read_to_string(&new_path).unwrap();
 
             assert_eq!(renamed_file_content, String::from("Hello, World!"));
+        }
+    }
+
+    #[cfg(test)]
+    mod file_read_tests {
+        use super::*;
+        // use std::fs;
+        // use std::path::PathBuf;
+        use tempfile::{tempdir, TempDir};
+
+        fn create_temp_file() -> (TempDir, PathBuf) {
+            let temp_dir = tempdir().unwrap();
+            let file_path = temp_dir.path().join("hello.txt");
+
+            write_file(&file_path, "Hello, World!", &ExistingFilePolicy::Overwrite).unwrap();
+
+            (temp_dir, file_path)
+        }
+
+        #[test]
+        fn read_existing_file() {
+            let (_temp_dir, file_path) = create_temp_file();
+
+            let file_content = read_file(&file_path).unwrap();
+
+            assert_eq!(file_content, "Hello, World!");
+        }
+
+        #[test]
+        fn reject_not_found_target() {
+            let temp_dir = tempdir().unwrap();
+            let missing_file = temp_dir.path().join("missing.txt");
+
+            let err = read_file(&missing_file).unwrap_err();
+
+            assert_eq!(err.0, PomErrorCode::FilesystemReadTargetNotFound);
+        }
+
+        #[test]
+        fn reject_directory_target() {
+            let temp_dir = tempdir().unwrap();
+            let dir_path = temp_dir.path().join("my_dir");
+
+            fs::create_dir(&dir_path).unwrap();
+
+            let err = read_file(&dir_path).unwrap_err();
+
+            assert_eq!(err.0, PomErrorCode::FilesystemReadNotFile);
         }
     }
 }

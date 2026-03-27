@@ -48,6 +48,9 @@ pub enum PomErrorCode {
     FilesystemRenameOriginNotFound = 313,
     FilesystemRenameDestinationExists = 314,
     FilesystemRenameFailed = 315,
+    FilesystemReadTargetNotFound = 316,
+    FilesystemReadNotFile = 317,
+    FilesystemReadFailed = 318,
     // Prompt errors: 4x
     PromptSelectionFail = 40,
     PromptStringFail = 41,
@@ -130,6 +133,9 @@ impl PomErrorCode {
                 "A file already exists at the destination path."
             }
             Self::FilesystemRenameFailed => "Failed to rename a file.",
+            Self::FilesystemReadTargetNotFound => "Failed to find the file to read.",
+            Self::FilesystemReadNotFile => "Target to read is not a file.",
+            Self::FilesystemReadFailed => "Failed to read a file.",
 
             // Prompt errors
             Self::PromptSelectionFail => "Failed to prompt for menu item selection.",
