@@ -41,7 +41,7 @@ pub fn resolve_old_module_name(
     old_module_name_parameter: Option<String>,
     project_root: &Path,
     search_scope: &HashSet<PathBuf>,
-) -> PomResult<(PathBuf, String, ModuleFiles)> {
+) -> PomResult<(PathBuf, String, String, ModuleFiles)> {
     let (_, old_name_normalized, old_header_guard) = resolve_new_name(
         old_module_name_parameter,
         "Module old name (without file extension)",
@@ -64,7 +64,12 @@ pub fn resolve_old_module_name(
         module_location = search_result.get_unique_location()?;
     }
     let module_files = search_result.get_module_files(&module_location)?;
-    Ok((module_location, old_header_guard, module_files))
+    Ok((
+        module_location,
+        old_name_normalized,
+        old_header_guard,
+        module_files,
+    ))
 }
 
 fn resolve_new_name(

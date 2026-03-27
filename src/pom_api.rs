@@ -10,14 +10,6 @@ pub fn project_config_function() -> PomResult<()> {
     Ok(())
 }
 
-pub fn module_rename_function(
-    _old_module_name: Option<String>,
-    _new_module_name: Option<String>,
-) -> PomResult<()> {
-    eprintln!("`pom module rename` - not implemented yet");
-    Ok(())
-}
-
 pub fn module_remove_function(_module_name: Option<String>) -> PomResult<()> {
     eprintln!("`pom module remove` - not implemented yet");
     Ok(())
