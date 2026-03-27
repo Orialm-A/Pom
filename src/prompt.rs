@@ -5,7 +5,8 @@
 use crate::errors::{PomErrorCode, PomResult};
 use crate::filesystem::ModulesFound;
 use crate::project_layout::{ModuleLevelSpec, ModuleLevelsMap};
-use dialoguer::{Input, Select, theme::ColorfulTheme};
+use dialoguer::{Confirm, Input, Select, theme::ColorfulTheme};
+// use yes_or_no::yes_or_no;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use unicode_normalization::UnicodeNormalization;
@@ -126,6 +127,21 @@ fn menu_helper(mut items: Vec<String>, prompt_hint: &str) -> PomResult<String> {
         .map_err(|e| (PomErrorCode::PromptSelectionFail, Some(e.to_string())))?;
 
     Ok(items[selection].clone())
+}
+
+/// Prompt the user for a confirmation
+///
+/// Returns the choice as a `bool`.
+///
+/// # Errors
+/// - `PomErrorCode::PromptConfirmationFail` if the prompt failed
+pub fn confirm(prompt_hint: &str) -> PomResult<bool> {
+    let result = Confirm::with_theme(&ColorfulTheme::default())
+        .with_prompt(prompt_hint)
+        .interact() // Returns `Result<bool>`
+        .map_err(|e| (PomErrorCode::PromptConfirmationFail, Some(e.to_string())))?;
+
+    Ok(result)
 }
 
 #[cfg(test)]

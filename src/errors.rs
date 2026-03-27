@@ -54,6 +54,7 @@ pub enum PomErrorCode {
     // Prompt errors: 4x
     PromptSelectionFail = 40,
     PromptStringFail = 41,
+    PromptConfirmationFail = 42,
     // `pom.toml` file errors: 5x
     PomTomlFileSerializationFail = 50,
     PomTomlFileDeserializationFail = 51,
@@ -140,6 +141,7 @@ impl PomErrorCode {
             // Prompt errors
             Self::PromptSelectionFail => "Failed to prompt for menu item selection.",
             Self::PromptStringFail => "Failed to prompt for input.",
+            Self::PromptConfirmationFail => "Failed to prompt for confirmation.",
 
             // pom.toml errors
             Self::PomTomlFileSerializationFail => "Failed to serialize `pom.toml` content.",

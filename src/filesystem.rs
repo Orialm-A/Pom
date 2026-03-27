@@ -513,20 +513,18 @@ pub fn read_file(file_path: &Path) -> PomResult<String> {
         return Err((
             PomErrorCode::FilesystemReadTargetNotFound,
             Some(file_path.display().to_string()),
-        ))
+        ));
     }
 
     if !file_path.is_file() {
         return Err((
             PomErrorCode::FilesystemReadNotFile,
             Some(file_path.display().to_string()),
-        ))
+        ));
     }
 
-    let file_content = fs::read_to_string(file_path).map_err(|e| {(
-        PomErrorCode::FilesystemReadFailed,
-        Some(e.to_string()),
-    )})?;
+    let file_content = fs::read_to_string(file_path)
+        .map_err(|e| (PomErrorCode::FilesystemReadFailed, Some(e.to_string())))?;
 
     Ok(file_content)
 }
@@ -1015,7 +1013,7 @@ mod tests {
         use super::*;
         // use std::fs;
         // use std::path::PathBuf;
-        use tempfile::{tempdir, TempDir};
+        use tempfile::{TempDir, tempdir};
 
         fn create_temp_file() -> (TempDir, PathBuf) {
             let temp_dir = tempdir().unwrap();
