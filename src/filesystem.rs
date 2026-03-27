@@ -116,8 +116,8 @@ pub enum ExistingFilePolicy {
 /// - a source file on
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct ModuleFiles {
-    header_file: bool,
-    source_file: bool,
+    pub header_file: bool,
+    pub source_file: bool,
 }
 
 /// Store all module locations found while searching the project.
@@ -476,6 +476,26 @@ pub fn search_module(
         }
     }
     Ok(found)
+}
+
+pub fn rename_file(old_path: &Path, new_path: &Path) -> PomResult<()> {
+    if !old_path.exists() {
+        return Err((
+            PomErrorCode::FilesystemRenameOriginNotFound,
+            Some(format!("{}", old_path.display())),
+        ));
+    }
+
+    if new_path.exists() {
+        return Err((
+            PomErrorCode::FilesystemRenameDestinationExists,
+            Some(format!("{}", new_path.display())),
+        ));
+    }
+    fs::rename(old_path, new_path)
+        .map_err(|e| (PomErrorCode::FilesystemRenameFailed, Some(e.to_string())))?;
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -891,6 +911,69 @@ mod tests {
             ]);
 
             assert_eq!(locations, expected_locations);
+        }
+    }
+
+    mod file_rename_tests {
+        use super::*;
+
+        fn create_temp_files() -> (tempfile::TempDir, PathBuf, PathBuf, PathBuf) {
+            let temp_dir = tempdir().unwrap();
+            let test_root = temp_dir.path().join("project_root");
+
+            fs::create_dir(&test_root).unwrap();
+
+            let file_hello_world = test_root.join("hello_world.txt");
+            write_file(
+                &file_hello_world,
+                "Hello, World!",
+                &ExistingFilePolicy::Overwrite,
+            )
+            .unwrap();
+
+            let file_hello_rust = test_root.join("hello_rust.txt");
+            write_file(
+                &file_hello_rust,
+                "Hello, Rust!",
+                &ExistingFilePolicy::Overwrite,
+            )
+            .unwrap();
+
+            return (temp_dir, test_root, file_hello_world, file_hello_rust);
+        }
+
+        #[test]
+        fn reject_not_found_files() {
+            let (_temp_dir, test_root, _, file_hello_rust) = create_temp_files();
+
+            let wrong_file = test_root.join("wrong_file.txt");
+
+            let err = rename_file(&wrong_file, &file_hello_rust).unwrap_err();
+
+            assert_eq!(err.0, PomErrorCode::FilesystemRenameOriginNotFound);
+        }
+
+        #[test]
+        fn reject_existing_destination() {
+            let (_temp_dir, _, file_hello_world, file_hello_rust) = create_temp_files();
+            let err = rename_file(&file_hello_world, &file_hello_rust).unwrap_err();
+            assert_eq!(err.0, PomErrorCode::FilesystemRenameDestinationExists);
+        }
+
+        #[test]
+        fn rename_file_renames_file() {
+            let (_temp_dir, _test_root, file_hello_world, _) = create_temp_files();
+
+            let new_path = file_hello_world.with_file_name("hello_universe.txt");
+
+            rename_file(&file_hello_world, &new_path).unwrap();
+
+            assert!(!file_hello_world.exists());
+            assert!(new_path.exists());
+
+            let renamed_file_content = fs::read_to_string(&new_path).unwrap();
+
+            assert_eq!(renamed_file_content, String::from("Hello, World!"));
         }
     }
 }

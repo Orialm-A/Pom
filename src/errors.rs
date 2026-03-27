@@ -45,6 +45,9 @@ pub enum PomErrorCode {
     FilesystemFileOverwriteForbidded = 310,
     FileSystemModuleSearchResultNotUnique = 311,
     FileSystemModuleSearchResultKeyNotFound = 312,
+    FilesystemRenameOriginNotFound = 313,
+    FilesystemRenameDestinationExists = 314,
+    FilesystemRenameFailed = 315,
     // Prompt errors: 4x
     PromptSelectionFail = 40,
     PromptStringFail = 41,
@@ -122,6 +125,11 @@ impl PomErrorCode {
             Self::FileSystemModuleSearchResultKeyNotFound => {
                 "Tried to select a module location despite none were available."
             }
+            Self::FilesystemRenameOriginNotFound => "Failed to find the file to rename.",
+            Self::FilesystemRenameDestinationExists => {
+                "A file already exists at the destination path."
+            }
+            Self::FilesystemRenameFailed => "Failed to rename a file.",
 
             // Prompt errors
             Self::PromptSelectionFail => "Failed to prompt for menu item selection.",
