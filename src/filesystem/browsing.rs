@@ -2,10 +2,9 @@
 //!
 //! Provides helpers to traverse and validate filesystem entries.
 
+use crate::errors::{PomErrorCode, PomResult};
 use std::path::{Path, PathBuf};
 use walkdir;
-use crate::errors::{PomErrorCode, PomResult};
-
 
 #[derive(Debug, PartialEq)]
 /// Reperesents the type of a `WalkDir::EntryDir`

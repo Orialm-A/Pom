@@ -1,11 +1,10 @@
 use std::path::{Path, PathBuf};
 
 use crate::cli::resolution::{resolve_project_name, resolve_project_root, resolve_project_target};
-use crate::filesystem::io_ops::{create_directories};
+use crate::filesystem::io_ops::{ExistingFilePolicy, copy_files, create_directories, write_file};
 
 use crate::errors::{PomErrorCode, PomResult};
-use crate::filesystem_deprecated::{ExistingFilePolicy, copy_files, /*create_directories, */write_file};
-use crate::project_layout::{DoxygenGroup /*ModuleLevelSpec*/, resolve_project_layout};
+use crate::project_layout::{DoxygenGroup, resolve_project_layout};
 use crate::project_toml::create_pom_toml_file;
 use crate::template_rendering::{FieldKey, TemplateFields};
 

@@ -2,9 +2,7 @@
 //!
 //! The `PathList` trait allows functions to accept either a single path or a collection of paths.
 
-
 use std::path::{Path, PathBuf};
-
 
 pub trait PathList {
     // Learning notes: We define a trait = a list of methods a type must provide

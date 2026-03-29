@@ -2,16 +2,14 @@
 //!
 //! Provides utilities for reading, writing, copying, and modifying filesystem entries.
 
-
-use std::path::{Path};
 use crate::errors::{PomErrorCode, PomResult};
-use crate::filesystem::{path_list};
+use crate::filesystem::browsing::{EntryKind, validate_dir_entry};
+use crate::filesystem::path_list;
+use crate::template_rendering::{TemplateFields, get_rendered_template_dest, render_template};
 use std::fs::{self, OpenOptions};
 use std::io::Write;
-use crate::template_rendering::{TemplateFields, get_rendered_template_dest, render_template};
+use std::path::Path;
 use walkdir::WalkDir;
-use crate::filesystem::browsing::{EntryKind, validate_dir_entry};
-
 
 /// Represents the action to take when a file write or copy conflicts with an existing file
 #[derive(PartialEq)]
@@ -46,8 +44,6 @@ pub fn create_directories(dirs_paths: &(impl path_list::PathList + ?Sized)) -> P
     }
     Ok(())
 }
-
-
 
 /// Copy files from source_root to destination_root.
 ///
@@ -174,8 +170,6 @@ pub fn copy_with_rendering_helper(
     Ok(1)
 }
 
-
-
 /// Read the content of a file.
 ///
 /// # Errors
@@ -245,7 +239,6 @@ pub fn write_file(
         Err(src) => Err((PomErrorCode::FilesystemFileWriteFail, Some(src.to_string()))),
     }
 }
-
 
 /// Rename a file.
 ///

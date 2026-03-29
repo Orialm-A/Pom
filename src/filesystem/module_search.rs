@@ -2,13 +2,11 @@
 //!
 //! Provides utilities to search for C modules in the project filesystem.
 
-
-use std::path::{Path, PathBuf};
 use crate::errors::{PomErrorCode, PomResult};
-use std::collections::{HashMap, HashSet};
-use walkdir::WalkDir;
 use crate::filesystem::browsing::{EntryKind, validate_dir_entry};
-
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
+use walkdir::WalkDir;
 
 /// Describe which files were found for a module in a given directory.
 ///
@@ -40,13 +38,9 @@ impl ModulesFound {
         }
     }
 
-
-
     pub fn len(&self) -> usize {
         self.modules.len()
     }
-
-
 
     /// Mark that a header file was found for the module in `module_path`.
     ///
@@ -93,8 +87,6 @@ impl ModulesFound {
         }
     }
 
-
-
     /// Return all the locations found as `Vec<String>`
     ///
     /// This is used for menu selection.
@@ -117,8 +109,6 @@ impl ModulesFound {
         Ok(self.modules.keys().next().unwrap().clone())
     }
 
-
-
     /// Return the file presence information for a module at the given location.
     ///
     /// # Arguments
@@ -126,7 +116,7 @@ impl ModulesFound {
     ///
     /// # Errors
     /// - `PomErrorCode::FileSystemModuleSearchResultKeyNotFound` if the
-    /// provided `module_location` does not exist in the search results
+    ///   provided `module_location` does not exist in the search results
     pub fn get_module_files(&self, module_location: &Path) -> PomResult<ModuleFiles> {
         if let Some(module) = self.modules.get(module_location) {
             Ok(module.clone())
@@ -135,8 +125,6 @@ impl ModulesFound {
         }
     }
 }
-
-
 
 /// Search for modules with the given name within the project.
 ///

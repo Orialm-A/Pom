@@ -7,7 +7,7 @@ use crate::cli::resolution::{
     resolve_project_root,
 };
 use crate::errors::{PomErrorCode, PomResult};
-use crate::filesystem_deprecated::{ExistingFilePolicy, copy_with_rendering_helper};
+use crate::filesystem::io_ops::{ExistingFilePolicy, copy_with_rendering_helper};
 use crate::project_toml::resolve_project_toml;
 use crate::template_rendering::{FieldKey, TemplateFields};
 use chrono::Datelike;

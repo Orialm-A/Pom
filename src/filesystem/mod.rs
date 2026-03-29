@@ -1,4 +1,4 @@
-mod browsing;
+pub mod browsing;
 pub mod io_ops;
-mod module_search;
+pub mod module_search;
 mod path_list;
