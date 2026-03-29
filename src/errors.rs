@@ -42,7 +42,7 @@ pub enum PomErrorCode {
     FilesystemCopySourceMissing = 307,
     FilesystemCopySourceNotDir = 308,
     FilesystemCopyFail = 309,
-    FilesystemFileOverwriteForbidded = 310,
+    FilesystemFileOverwriteForbidden = 310,
     FileSystemModuleSearchResultNotUnique = 311,
     FileSystemModuleSearchResultKeyNotFound = 312,
     FilesystemRenameOriginNotFound = 313,
@@ -120,7 +120,7 @@ impl PomErrorCode {
             Self::FilesystemCopySourceMissing => "Copy source is missing.",
             Self::FilesystemCopySourceNotDir => "Copy source is not a directory.",
             Self::FilesystemCopyFail => "Copy failed.",
-            Self::FilesystemFileOverwriteForbidded => {
+            Self::FilesystemFileOverwriteForbidden => {
                 "File copy or creation failed because overwrite is forbidden by policy."
             }
             Self::FileSystemModuleSearchResultNotUnique => {

@@ -3,7 +3,7 @@
 //! This module handles `pom.toml` file in projects
 
 use crate::errors::{PomErrorCode, PomResult};
-use crate::filesystem::{ExistingFilePolicy, write_file};
+use crate::filesystem_deprecated::{ExistingFilePolicy, write_file};
 use crate::project_layout::{ModuleLevelSpec, ModuleLevelsMap};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};

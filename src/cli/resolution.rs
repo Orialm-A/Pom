@@ -1,5 +1,5 @@
 use crate::errors::{PomErrorCode, PomResult};
-use crate::filesystem::{EntryKind, ModuleFiles, search_module, validate_dir_entry};
+use crate::filesystem_deprecated::{EntryKind, ModuleFiles, search_module, validate_dir_entry};
 use crate::project_layout::ModuleLevelsMap;
 use crate::prompt::{
     prompt_if_missing_string, select_module, select_module_level, select_target, slugify_snake,

@@ -284,7 +284,7 @@ pub fn validate_dir_entry(
 /// Copy files contained in a directory from a source to a destination
 ///
 /// Create required sub directories to respect the source file tree
-/// May error `PomErrorCode::FilesystemFileOverwriteForbidded` or `FilesystemCopyFail`
+/// May error `PomErrorCode::FilesystemFileOverwriteForbidden` or `FilesystemCopyFail`
 pub fn copy_files(
     source_root: &Path,
     destination_root: &Path,
@@ -333,7 +333,7 @@ pub fn copy_files(
             EntryKind::File => {
                 if destination_path.exists() && existing_file_policy == ExistingFilePolicy::Fail {
                     return Err((
-                        PomErrorCode::FilesystemFileOverwriteForbidded,
+                        PomErrorCode::FilesystemFileOverwriteForbidden,
                         Some(format!("`{}` already exists.", destination_path.display())),
                     ));
                 }
@@ -394,7 +394,7 @@ pub fn copy_with_rendering_helper(
 
 /// Write a file
 ///
-/// May error `PomErrorCode::FilesystemFileCreationFail`, `FilesystemFileWriteFail` or `FilesystemFileOverwriteForbidded`
+/// May error `PomErrorCode::FilesystemFileCreationFail`, `FilesystemFileWriteFail` or `FilesystemFileOverwriteForbidden`
 pub fn write_file(
     file_path: &Path,
     file_content: &str,
@@ -402,7 +402,7 @@ pub fn write_file(
 ) -> PomResult<()> {
     if file_path.exists() && *existing_file_policy == ExistingFilePolicy::Fail {
         return Err((
-            PomErrorCode::FilesystemFileOverwriteForbidded,
+            PomErrorCode::FilesystemFileOverwriteForbidden,
             Some(format!("`{}` already exists.", file_path.display())),
         ));
     }
@@ -786,7 +786,7 @@ mod tests {
 
             let err =
                 copy_files(src.path(), dst.path(), ExistingFilePolicy::Fail, &None).unwrap_err();
-            assert_eq!(err.0, PomErrorCode::FilesystemFileOverwriteForbidded);
+            assert_eq!(err.0, PomErrorCode::FilesystemFileOverwriteForbidden);
         }
 
         #[test]
@@ -863,7 +863,7 @@ mod tests {
             fs::write(&p, "existing").unwrap();
             let err = write_file(&p, "new", &ExistingFilePolicy::Fail).unwrap_err();
 
-            assert_eq!(err.0, PomErrorCode::FilesystemFileOverwriteForbidded);
+            assert_eq!(err.0, PomErrorCode::FilesystemFileOverwriteForbidden);
         }
     }
 

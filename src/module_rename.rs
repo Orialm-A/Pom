@@ -6,7 +6,7 @@ use crate::cli::resolution::{
     resolve_new_module_name, resolve_old_module_name, resolve_project_root,
 };
 use crate::errors::PomResult;
-use crate::filesystem::{ExistingFilePolicy, read_file, rename_file, write_file};
+use crate::filesystem_deprecated::{ExistingFilePolicy, read_file, rename_file, write_file};
 use crate::project_toml::resolve_project_toml;
 use crate::prompt::confirm;
 use std::path::Path;

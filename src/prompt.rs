@@ -3,7 +3,7 @@
 //! Prompt user for missing information
 
 use crate::errors::{PomErrorCode, PomResult};
-use crate::filesystem::ModulesFound;
+use crate::filesystem_deprecated::ModulesFound;
 use crate::project_layout::{ModuleLevelSpec, ModuleLevelsMap};
 use dialoguer::{Confirm, Input, Select, theme::ColorfulTheme};
 // use yes_or_no::yes_or_no;
