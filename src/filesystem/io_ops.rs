@@ -153,15 +153,7 @@ pub fn copy_with_rendering_helper(
     fields: &TemplateFields,
     existing_file_policy: &ExistingFilePolicy,
 ) -> PomResult<usize> {
-    let template_content = match std::fs::read_to_string(entry_path) {
-        Ok(template_content) => template_content,
-        Err(src) => {
-            return Err((
-                PomErrorCode::FilesystemFileReadFail,
-                Some(format!("{}: {}", entry_path.display(), src)),
-            ));
-        }
-    };
+    let template_content = read_file(entry_path)?;
 
     let rendered_content = render_template(&template_content, fields);
 
@@ -175,7 +167,7 @@ pub fn copy_with_rendering_helper(
 /// # Errors
 /// - `PomErrorCode::FilesystemReadTargetNotFound` if the target does not exist
 /// - `PomErrorCode::FilesystemReadNotFile` if the target is not a file
-/// - `PomErrorCode::FilesystemReadFailed` if the file content cannot be read
+/// - `PomErrorCode::FilesystemReadFailed` if reading failed due to an OS error
 pub fn read_file(file_path: &Path) -> PomResult<String> {
     if !file_path.exists() {
         return Err((

@@ -3,11 +3,10 @@
 //! This module handles `pom.toml` file in projects
 
 use crate::errors::{PomErrorCode, PomResult};
-use crate::filesystem::io_ops::{ExistingFilePolicy, write_file};
+use crate::filesystem::io_ops::{ExistingFilePolicy, read_file, write_file};
 use crate::project_layout::{ModuleLevelSpec, ModuleLevelsMap};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use std::fs;
 use std::path::{Component, Path, PathBuf};
 
 /// Intermediary structure to serialize / deserialize the content of `pom.toml` for a project
@@ -92,13 +91,10 @@ pub fn resolve_project_toml(project_root: &Path) -> PomResult<PomToml> {
         ));
     }
 
-    let pom_toml_str = match fs::read_to_string(&pom_toml_path) {
+    let pom_toml_str = match read_file(&pom_toml_path) {
         Ok(pom_toml_str) => pom_toml_str,
-        Err(src) => {
-            return Err((
-                PomErrorCode::PomTomlFileCantOpen,
-                Some(format!("{}.\r\n{}", pom_toml_path.display(), src)),
-            ));
+        Err((_, hint)) => {
+            return Err((PomErrorCode::PomTomlFileCantOpen, hint));
         }
     };
 

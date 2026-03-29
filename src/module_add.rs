@@ -220,7 +220,7 @@ mod tests {
         assert!(c.is_file());
         assert!(h.is_file());
 
-        assert_eq!(fs::read_to_string(c).unwrap(), "C FILE");
-        assert_eq!(fs::read_to_string(h).unwrap(), "H FILE");
+        assert_eq!(read_file(c).unwrap(), "C FILE");
+        assert_eq!(read_file(h).unwrap(), "H FILE");
     }
 }

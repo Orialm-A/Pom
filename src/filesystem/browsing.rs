@@ -38,24 +38,16 @@ pub fn validate_dir_entry(
     entry: Result<walkdir::DirEntry, walkdir::Error>,
     project_root: &Path,
 ) -> PomResult<ValidatedEntry> {
-    let entry = match entry {
-        Ok(entry) => entry,
-        Err(src) => {
-            return Err((PomErrorCode::FilesystemEntryInvalid, Some(src.to_string())));
-        }
-    };
+    let entry = entry.map_err(|e| (PomErrorCode::FilesystemEntryInvalid, Some(e.to_string())))?;
 
     let full_path = entry.path();
 
-    let relative_path = match full_path.strip_prefix(project_root) {
-        Ok(relative_path) => relative_path,
-        Err(src) => {
-            return Err((
-                PomErrorCode::FilesystemStripPathPrefixFail,
-                Some(src.to_string()),
-            ));
-        }
-    };
+    let relative_path = full_path.strip_prefix(project_root).map_err(|e| {
+        (
+            PomErrorCode::FilesystemStripPathPrefixFail,
+            Some(e.to_string()),
+        )
+    })?;
 
     let file_type = entry.file_type();
     let kind = if file_type.is_file() {
