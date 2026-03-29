@@ -226,10 +226,10 @@ pub fn write_file(
             )
         })?;
 
-    match file.write_all(file_content.as_bytes()) {
-        Ok(()) => Ok(()),
-        Err(src) => Err((PomErrorCode::FilesystemFileWriteFail, Some(src.to_string()))),
-    }
+    file.write_all(file_content.as_bytes())
+        .map_err(|e| (PomErrorCode::FilesystemFileWriteFail, Some(e.to_string())))?;
+
+    Ok(())
 }
 
 /// Rename a file.
@@ -256,4 +256,376 @@ pub fn rename_file(old_path: &Path, new_path: &Path) -> PomResult<()> {
         .map_err(|e| (PomErrorCode::FilesystemRenameFailed, Some(e.to_string())))?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+    use tempfile::{TempDir, tempdir};
+
+    #[cfg(test)]
+    mod dir_creation_tests {
+        use super::*;
+
+        #[test]
+        fn creates_dirs_when_missing() {
+            let tmp = tempfile::tempdir().unwrap();
+            let project_root = tmp.path();
+
+            let dirs = vec![
+                project_root.join("src/app"),
+                project_root.join("resources/doc"),
+            ];
+
+            create_directories(&dirs).unwrap();
+
+            assert!(project_root.join("src").is_dir());
+            assert!(project_root.join("src/app").is_dir());
+            assert!(project_root.join("resources/doc").is_dir());
+        }
+
+        #[test]
+        fn succeeds_if_dirs_already_exist() {
+            let tmp = tempfile::tempdir().unwrap();
+            let project_root = tmp.path();
+
+            fs::create_dir_all(project_root.join("src/app")).unwrap();
+
+            let dirs = vec![
+                project_root.join("src/app"),
+                project_root.join("resources/doc"),
+            ];
+
+            create_directories(&dirs).unwrap();
+
+            assert!(project_root.join("src/app").is_dir());
+            assert!(project_root.join("resources/doc").is_dir());
+        }
+
+        #[test]
+        fn fails_if_dir_path_is_blocked_by_file() {
+            let tmp = tempfile::tempdir().unwrap();
+            let project_root = tmp.path();
+
+            // Create a file "src" so "src/app" cannot become a directory
+            let file_path = project_root.join("src");
+            write_file(&file_path, "abc", &ExistingFilePolicy::Overwrite).unwrap();
+
+            let dirs = vec![project_root.join("src/app")];
+
+            let err = create_directories(&dirs).unwrap_err();
+            assert_eq!(err.0, PomErrorCode::FilesystemDirCreationFail);
+        }
+    }
+
+    #[cfg(test)]
+    mod file_copying_tests {
+        use super::*;
+        use crate::template_rendering::FieldKey;
+
+        #[test]
+        fn copy_files_and_file_tree() {
+            let src = tempdir().unwrap();
+            let dst = tempdir().unwrap();
+
+            let src_root = src.path();
+            let dst_root = dst.path();
+
+            create_directories(&src_root.join("a/b")).unwrap();
+            write_file(
+                &src_root.join("root.txt"),
+                "root",
+                &ExistingFilePolicy::Overwrite,
+            )
+            .unwrap();
+            write_file(
+                &src_root.join("a/file1.txt"),
+                "one",
+                &ExistingFilePolicy::Overwrite,
+            )
+            .unwrap();
+            write_file(
+                &src_root.join("a/b/file2.txt"),
+                "two",
+                &ExistingFilePolicy::Overwrite,
+            )
+            .unwrap();
+
+            let n = copy_files(src_root, dst_root, ExistingFilePolicy::Overwrite, &None).unwrap();
+            assert_eq!(n, 3);
+
+            assert_eq!(read_file(&dst_root.join("root.txt")).unwrap(), "root");
+            assert_eq!(read_file(&dst_root.join("a/file1.txt")).unwrap(), "one");
+            assert_eq!(read_file(&dst_root.join("a/b/file2.txt")).unwrap(), "two");
+
+            assert!(dst_root.join("a/b").is_dir());
+        }
+
+        #[test]
+        fn templates_copied_with_rendering() {
+            let src = tempdir().unwrap();
+            let dst = tempdir().unwrap();
+
+            let src_root = src.path();
+            let dst_root = dst.path();
+
+            write_file(
+                &src_root.join("normal_file.txt"),
+                "A file without fields",
+                &ExistingFilePolicy::Overwrite,
+            )
+            .unwrap();
+            write_file(
+                &src_root.join("template_file.txt.pomrt"),
+                "A template file with an arbitrary field {{pom:module_doxygen_group}}.",
+                &ExistingFilePolicy::Overwrite,
+            )
+            .unwrap();
+
+            let mut template_fields = TemplateFields::new();
+            template_fields.insert(FieldKey::ModuleDoxygenGroup, "rendered");
+
+            let n = copy_files(
+                src_root,
+                dst_root,
+                ExistingFilePolicy::Overwrite,
+                &Some(template_fields),
+            )
+            .unwrap();
+
+            assert_eq!(n, 2);
+            assert_eq!(
+                read_file(&dst_root.join("normal_file.txt")).unwrap(),
+                "A file without fields"
+            );
+            assert_eq!(
+                read_file(&dst_root.join("template_file.txt")).unwrap(),
+                "A template file with an arbitrary field rendered."
+            );
+        }
+
+        #[test]
+        fn fails_if_source_missing() {
+            let dst = tempdir().unwrap();
+            let err = copy_files(
+                std::path::Path::new("this-path-should-not-exist-___"),
+                dst.path(),
+                ExistingFilePolicy::Overwrite,
+                &None,
+            )
+            .unwrap_err();
+
+            assert_eq!(err.0, PomErrorCode::FilesystemCopySourceMissing);
+        }
+
+        #[test]
+        fn fails_if_source_not_dir() {
+            let src = tempdir().unwrap();
+            let dst = tempdir().unwrap();
+
+            let file = src.path().join("not_a_dir.txt");
+            fs::write(&file, "x").unwrap();
+
+            let err =
+                copy_files(&file, dst.path(), ExistingFilePolicy::Overwrite, &None).unwrap_err();
+            assert_eq!(err.0, PomErrorCode::FilesystemCopySourceNotDir);
+        }
+
+        #[test]
+        fn fails_on_existing_file_when_policy_fail() {
+            let src = tempdir().unwrap();
+            let dst = tempdir().unwrap();
+
+            fs::write(src.path().join("a.txt"), "SRC").unwrap();
+
+            // Pre-create destination file with same relative path
+            fs::write(dst.path().join("a.txt"), "DST").unwrap();
+
+            let err =
+                copy_files(src.path(), dst.path(), ExistingFilePolicy::Fail, &None).unwrap_err();
+            assert_eq!(err.0, PomErrorCode::FilesystemFileOverwriteForbidden);
+        }
+
+        #[test]
+        fn overwrites_existing_file_when_policy_allows() {
+            let src = tempdir().unwrap();
+            let dst = tempdir().unwrap();
+
+            fs::write(src.path().join("a.txt"), "NEW").unwrap();
+            fs::write(dst.path().join("a.txt"), "OLD").unwrap();
+
+            let n =
+                copy_files(src.path(), dst.path(), ExistingFilePolicy::Overwrite, &None).unwrap();
+            assert_eq!(n, 1);
+
+            let content = read_file(&dst.path().join("a.txt")).unwrap();
+            assert_eq!(content, "NEW");
+        }
+
+        #[test]
+        fn skips_symlinks() {
+            use std::os::unix::fs::symlink;
+
+            let src = tempdir().unwrap();
+            let dst = tempdir().unwrap();
+
+            fs::write(src.path().join("real.txt"), "REAL").unwrap();
+            symlink(src.path().join("real.txt"), src.path().join("link.txt")).unwrap();
+
+            let n =
+                copy_files(src.path(), dst.path(), ExistingFilePolicy::Overwrite, &None).unwrap();
+
+            // Only real.txt copied; link.txt should be skipped
+            assert_eq!(n, 1);
+            assert!(dst.path().join("real.txt").exists());
+            assert!(!dst.path().join("link.txt").exists());
+        }
+    }
+
+    #[cfg(test)]
+    mod file_reading_tests {
+        use super::*;
+
+        fn create_temp_file() -> (TempDir, PathBuf) {
+            let temp_dir = tempdir().unwrap();
+            let file_path = temp_dir.path().join("hello.txt");
+
+            write_file(&file_path, "Hello, World!", &ExistingFilePolicy::Overwrite).unwrap();
+
+            (temp_dir, file_path)
+        }
+
+        #[test]
+        fn read_existing_file() {
+            let (_temp_dir, file_path) = create_temp_file();
+
+            let file_content = read_file(&file_path).unwrap();
+
+            assert_eq!(file_content, "Hello, World!");
+        }
+
+        #[test]
+        fn reject_not_found_target() {
+            let temp_dir = tempdir().unwrap();
+            let missing_file = temp_dir.path().join("missing.txt");
+
+            let err = read_file(&missing_file).unwrap_err();
+
+            assert_eq!(err.0, PomErrorCode::FilesystemReadTargetNotFound);
+        }
+
+        #[test]
+        fn reject_directory_target() {
+            let temp_dir = tempdir().unwrap();
+            let dir_path = temp_dir.path().join("my_dir");
+
+            fs::create_dir(&dir_path).unwrap();
+
+            let err = read_file(&dir_path).unwrap_err();
+
+            assert_eq!(err.0, PomErrorCode::FilesystemReadNotFile);
+        }
+    }
+
+    #[cfg(test)]
+    mod file_writing_tests {
+        use super::*;
+
+        #[test]
+        fn creates_file_and_writes_content() {
+            let dir = tempdir().unwrap();
+            let p = dir.path().join("x.txt");
+
+            write_file(&p, "hello", &ExistingFilePolicy::Overwrite).unwrap();
+            assert_eq!(read_file(&p).unwrap(), "hello");
+        }
+
+        #[test]
+        fn overwrites_and_truncates() {
+            let dir = tempdir().unwrap();
+            let p = dir.path().join("x.txt");
+
+            fs::write(&p, "0123456789").unwrap();
+            write_file(&p, "abc", &ExistingFilePolicy::Overwrite).unwrap();
+
+            // truncate(true) should have removed old tail
+            assert_eq!(read_file(&p).unwrap(), "abc");
+        }
+
+        #[test]
+        fn fails_if_exists_and_policy_fail() {
+            let dir = tempdir().unwrap();
+            let p = dir.path().join("x.txt");
+
+            fs::write(&p, "existing").unwrap();
+            let err = write_file(&p, "new", &ExistingFilePolicy::Fail).unwrap_err();
+
+            assert_eq!(err.0, PomErrorCode::FilesystemFileOverwriteForbidden);
+        }
+    }
+
+    #[cfg(test)]
+    mod file_rename_tests {
+        use super::*;
+
+        fn create_temp_files() -> (tempfile::TempDir, PathBuf, PathBuf, PathBuf) {
+            let temp_dir = tempdir().unwrap();
+            let test_root = temp_dir.path().join("project_root");
+
+            create_directories(&test_root).unwrap();
+
+            let file_hello_world = test_root.join("hello_world.txt");
+            write_file(
+                &file_hello_world,
+                "Hello, World!",
+                &ExistingFilePolicy::Overwrite,
+            )
+            .unwrap();
+
+            let file_hello_rust = test_root.join("hello_rust.txt");
+            write_file(
+                &file_hello_rust,
+                "Hello, Rust!",
+                &ExistingFilePolicy::Overwrite,
+            )
+            .unwrap();
+
+            return (temp_dir, test_root, file_hello_world, file_hello_rust);
+        }
+
+        #[test]
+        fn reject_not_found_files() {
+            let (_temp_dir, test_root, _, file_hello_rust) = create_temp_files();
+
+            let wrong_file = test_root.join("wrong_file.txt");
+
+            let err = rename_file(&wrong_file, &file_hello_rust).unwrap_err();
+
+            assert_eq!(err.0, PomErrorCode::FilesystemRenameOriginNotFound);
+        }
+
+        #[test]
+        fn reject_existing_destination() {
+            let (_temp_dir, _, file_hello_world, file_hello_rust) = create_temp_files();
+            let err = rename_file(&file_hello_world, &file_hello_rust).unwrap_err();
+            assert_eq!(err.0, PomErrorCode::FilesystemRenameDestinationExists);
+        }
+
+        #[test]
+        fn rename_file_renames_file() {
+            let (_temp_dir, _test_root, file_hello_world, _) = create_temp_files();
+
+            let new_path = file_hello_world.with_file_name("hello_universe.txt");
+
+            rename_file(&file_hello_world, &new_path).unwrap();
+
+            assert!(!file_hello_world.exists());
+            assert!(new_path.exists());
+
+            let renamed_file_content = fs::read_to_string(&new_path).unwrap();
+
+            assert_eq!(renamed_file_content, String::from("Hello, World!"));
+        }
+    }
 }

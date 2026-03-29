@@ -159,6 +159,7 @@ fn create_module_files(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::filesystem::io_ops::read_file;
     use std::fs;
     use tempfile::tempdir;
 
@@ -220,7 +221,7 @@ mod tests {
         assert!(c.is_file());
         assert!(h.is_file());
 
-        assert_eq!(read_file(c).unwrap(), "C FILE");
-        assert_eq!(read_file(h).unwrap(), "H FILE");
+        assert_eq!(read_file(&c).unwrap(), "C FILE");
+        assert_eq!(read_file(&h).unwrap(), "H FILE");
     }
 }
