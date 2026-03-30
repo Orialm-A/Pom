@@ -102,21 +102,21 @@ fn get_dir_name(path: &Path) -> PomResult<&str> {
 }
 
 fn get_generation_layout() -> PomResult<Vec<GenerationLayoutEntry>> {
-    let generation_layout_sources: Vec<&str> = vec![
+    let generation_layout_sources: Vec<PathBuf> = Vec::from([
         // Later: add higher priority config files here
-        "assets/default_generation_layout.toml", // Lowest priority
-    ];
+        PathBuf::from("assets/default_generation_layout.toml"), // Lowest priority
+    ]);
 
     let mut generation_layout: Option<TomlOutput> = None;
 
     for generation_layout_source in generation_layout_sources {
-        match get_generation_layout_from_file(generation_layout_source) {
+        match get_generation_layout_from_file(&generation_layout_source) {
             Ok(extracted_generation_layout) => {
                 // Shadowing doesn't work there
                 generation_layout = Some(extracted_generation_layout);
                 println!(
                     "Start project generation using {}...",
-                    generation_layout_source
+                    generation_layout_source.display()
                 );
                 break; // stop at first valid source
             }
@@ -133,10 +133,9 @@ fn get_generation_layout() -> PomResult<Vec<GenerationLayoutEntry>> {
     }
 }
 
-fn get_generation_layout_from_file(generation_layout_file_path: &str) -> PomResult<TomlOutput> {
-    let generation_layout_file_path = PathBuf::from(generation_layout_file_path); //TODO Check if the argument type could not change
+fn get_generation_layout_from_file(generation_layout_file_path: &Path) -> PomResult<TomlOutput> {
 
-    let generation_layout_str = match read_file(&generation_layout_file_path) {
+    let generation_layout_str = match read_file(generation_layout_file_path) {
         Ok(generation_layout_str) => generation_layout_str,
         Err((code, hint)) => {
             return match code {
