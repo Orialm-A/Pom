@@ -1,8 +1,9 @@
 use crate::errors::{PomErrorCode, PomResult};
 use crate::filesystem::browsing::{EntryKind, validate_dir_entry};
 use crate::filesystem::module_search::{ModuleFiles, search_module};
+use crate::format_text::slugify_snake;
 use crate::project_layout::{ModuleLevelSpec, ModuleLevelsMap};
-use crate::prompt::{prompt_if_missing_string, select, slugify_snake};
+use crate::prompt::{prompt_if_missing_string, select};
 
 use convert_case::{Case, Casing};
 use std::collections::{HashMap, HashSet};
