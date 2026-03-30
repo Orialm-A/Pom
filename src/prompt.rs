@@ -3,10 +3,7 @@
 //! Provides all the user to get user input at runtime.
 
 use crate::errors::{PomErrorCode, PomResult};
-use crate::project_layout::{ModuleLevelSpec, ModuleLevelsMap};
 use dialoguer::{Confirm, Input, Select, theme::ColorfulTheme};
-use std::collections::HashMap;
-use std::path::PathBuf;
 use unicode_normalization::UnicodeNormalization;
 
 /// Prompt the user for a string if the passed one is `None`.
@@ -80,73 +77,6 @@ pub fn slugify_snake(input: &str) -> String {
     normalized_string
 }
 
-/// Prompt the user to select a target from a menu
-///
-/// # Arguments
-/// - `available_targets` - Mapping of target names to paths
-///
-/// # Returns
-/// Path to the selected target.
-///
-/// # Errors
-/// - `PomErrorCode::FileTemplateMissing` if the map is empty
-pub fn select_target(available_targets: &HashMap<String, PathBuf>) -> PomResult<PathBuf> {
-    let keys: Vec<String> = available_targets.keys().cloned().collect();
-
-    if keys.is_empty() {
-        return Err((
-            PomErrorCode::FileTemplateMissing,
-            Some("In `assets/target`".to_string()),
-        ));
-    }
-
-    let selected_key = menu_helper(
-        &keys,
-        "Typed target not found. Select one of the available targets",
-    )?;
-    Ok(available_targets[&selected_key].clone())
-}
-
-/// Prompt the user to select a module level from a menu.
-///
-/// # Arguments
-/// - `available_targets` - Mapping of module level names to their specs
-///
-/// # Returns
-/// Specs of the selected module level.
-///
-/// # Errors
-/// - Propagates promt-relate errors encountered during execution
-pub fn select_module_level(
-    available_levels: &ModuleLevelsMap,
-) -> PomResult<(ModuleLevelSpec, String)> {
-    let keys: Vec<String> = available_levels.keys().cloned().collect();
-    let selected_key = menu_helper(
-        &keys,
-        "Typed level not found. Select one from availables in `pom.toml`",
-    )?;
-    Ok((available_levels[&selected_key].clone(), selected_key))
-}
-
-/// Prompt the user to select a module location from a menu.
-///
-/// # Arguments
-/// - `available_modules` - Paths to the available module locations
-///
-/// # Returns
-/// Path to the selected module location.
-///
-/// # Errors
-/// - Propagates promt-relate errors encountered during execution
-pub fn select_module(available_modules: &[String]) -> PomResult<PathBuf> {
-    let selected_key = menu_helper(
-        available_modules,
-        "Several modules found. Select the correct location",
-    )?;
-
-    Ok(selected_key.into())
-}
-
 /// Prompt the user to select an entry in a menu.
 ///
 /// This function order the entries alphabetically
@@ -160,7 +90,7 @@ pub fn select_module(available_modules: &[String]) -> PomResult<PathBuf> {
 ///
 /// # Errors
 /// - `PomErrorCode::PromptSelectionFail` if the prompt fails due to an OS error
-fn menu_helper(items: &[String], prompt_hint: &str) -> PomResult<String> {
+pub fn select(items: &[String], prompt_hint: &str) -> PomResult<String> {
     let mut items = items.to_vec();
     items.sort();
 

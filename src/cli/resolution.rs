@@ -1,10 +1,8 @@
 use crate::errors::{PomErrorCode, PomResult};
 use crate::filesystem::browsing::{EntryKind, validate_dir_entry};
 use crate::filesystem::module_search::{ModuleFiles, search_module};
-use crate::project_layout::ModuleLevelsMap;
-use crate::prompt::{
-    prompt_if_missing_string, select_module, select_module_level, select_target, slugify_snake,
-};
+use crate::project_layout::{ModuleLevelSpec, ModuleLevelsMap};
+use crate::prompt::{prompt_if_missing_string, select, slugify_snake};
 
 use convert_case::{Case, Casing};
 use std::collections::{HashMap, HashSet};
@@ -16,7 +14,7 @@ use walkdir::WalkDir;
 pub fn resolve_project_name(
     project_name_parameter: Option<String>,
 ) -> PomResult<(String, String, String)> {
-    resolve_new_name(project_name_parameter, "Project name")
+    resolve_module_name(project_name_parameter, "Project name")
 }
 
 /// Resolve new module name passed by parameter in the CLI
@@ -25,7 +23,7 @@ pub fn resolve_new_module_name(
     module_prefix: &Option<String>,
 ) -> PomResult<(String, String)> {
     let (_, mut normalized_module_name, mut header_guard) =
-        resolve_new_name(module_name_parameter, "Module name")?;
+        resolve_module_name(module_name_parameter, "Module name")?;
 
     header_guard = format!("{}_H", header_guard);
 
@@ -43,7 +41,7 @@ pub fn resolve_old_module_name(
     project_root: &Path,
     search_scope: &HashSet<PathBuf>,
 ) -> PomResult<(PathBuf, String, String, ModuleFiles)> {
-    let (_, old_name_normalized, old_header_guard) = resolve_new_name(
+    let (_, old_name_normalized, old_header_guard) = resolve_module_name(
         old_module_name_parameter,
         "Module old name (without file extension)",
     )?;
@@ -74,7 +72,26 @@ pub fn resolve_old_module_name(
     ))
 }
 
-fn resolve_new_name(
+/// Resolve a name from CLI input or user prompt, and derive normalized variants.
+///
+/// If `original_name` is `None`, the user is prompted using `prompt_hint`.
+/// The resulting name is then transformed into:
+/// - a normalized snake_case version (for filesystem paths)
+/// - an upper snake_case version (for header guards)
+///
+/// # Arguments
+/// - `original_name` - Optional name provided via CLI
+/// - `prompt_hint` - Prompt shown to the user if no name is provided
+///
+/// # Returns
+/// A tuple containing:
+/// - the original name (as entered by the user)
+/// - the normalized snake_case name
+/// - the upper snake_case name
+///
+/// # Errors
+/// - Propagates errors from the prompt if user input fails
+pub fn resolve_module_name(
     original_name: Option<String>,
     prompt_hint: &str,
 ) -> PomResult<(String, String, String)> {
@@ -243,13 +260,78 @@ pub fn resolve_module_level(
     ))
 }
 
+/// Prompt the user to select a target from a menu
+///
+/// # Arguments
+/// - `available_targets` - Mapping of target names to paths
+///
+/// # Returns
+/// Path to the selected target.
+///
+/// # Errors
+/// - `PomErrorCode::FileTemplateMissing` if the map is empty
+fn select_target(available_targets: &HashMap<String, PathBuf>) -> PomResult<PathBuf> {
+    let keys: Vec<String> = available_targets.keys().cloned().collect();
+
+    if keys.is_empty() {
+        return Err((
+            PomErrorCode::FileTemplateMissing,
+            Some("In `assets/target`".to_string()),
+        ));
+    }
+
+    let selected_key = select(
+        &keys,
+        "Typed target not found. Select one of the available targets",
+    )?;
+    Ok(available_targets[&selected_key].clone())
+}
+
+/// Prompt the user to select a module level from a menu.
+///
+/// # Arguments
+/// - `available_targets` - Mapping of module level names to their specs
+///
+/// # Returns
+/// Specs of prompt_if_missing_stringthe selected module level.
+///
+/// # Errors
+/// - Propagates promt-relate errors encountered during execution
+fn select_module_level(available_levels: &ModuleLevelsMap) -> PomResult<(ModuleLevelSpec, String)> {
+    let keys: Vec<String> = available_levels.keys().cloned().collect();
+    let selected_key = select(
+        &keys,
+        "Typed level not found. Select one from availables in `pom.toml`",
+    )?;
+    Ok((available_levels[&selected_key].clone(), selected_key))
+}
+
+/// Prompt the user to select a module location from a menu.
+///
+/// # Arguments
+/// - `available_modules` - Paths to the available module locations
+///
+/// # Returns
+/// Path to the selected module location.
+///
+/// # Errors
+/// - Propagates promt-relate errors encountered during execution
+fn select_module(available_modules: &[String]) -> PomResult<PathBuf> {
+    let selected_key = select(
+        available_modules,
+        "Several modules found. Select the correct location",
+    )?;
+
+    Ok(selected_key.into())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn new_names_are_resolved() {
-        let result = resolve_new_name(Some("Test Name".to_string()), "Test Hint");
+        let result = resolve_module_name(Some("Test Name".to_string()), "Test Hint");
         assert!(result.is_ok());
 
         let (name, name_normalized, name_const_case) = result.unwrap();
