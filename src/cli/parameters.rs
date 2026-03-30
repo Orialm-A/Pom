@@ -82,8 +82,15 @@ pub enum ModuleCommands {
     },
     /// Rename a module (old and new name will be prompted of omitted)
     Rename {
+        /// Current name of the module to rename
+        #[arg(value_name = "OLD_NAME")]
         old_module_name: Option<String>,
+        /// New name for the module
+        #[arg(value_name = "NEW_NAME")]
         new_module_name: Option<String>,
+        /// process with renaming without confirmation prompt
+        #[arg(short = 'y', long = "yes")]
+        skip_confirmation: bool,
     },
     /// Remove a module (name will be prompted of omitted)
     Remove { module_name: Option<String> },

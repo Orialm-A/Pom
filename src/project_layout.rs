@@ -4,18 +4,17 @@
 //! pertinent info to create a project
 
 use crate::errors::{PomErrorCode, PomResult};
+use crate::filesystem::io_ops::read_file;
 use convert_case::{Case, Casing};
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::HashMap;
-use std::fs;
-use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Deserialize)]
 /// Describe an entry in the project layout, used to generate file tree and files
 struct GenerationLayoutEntry {
-    pub path: String,
+    pub path: PathBuf,
     pub defgroup: Option<String>,
     pub brief: Option<String>,
     #[serde(default)]
@@ -34,7 +33,7 @@ pub struct DoxygenGroup {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 /// Describe a module specs for `pom module create`
 pub struct ModuleLevelSpec {
-    pub path: String, // Store paths relatively to project root to ensure portability across different computers (`git clone`)
+    pub path: PathBuf, // Store paths relatively to project root to ensure portability across different computers (`git clone`)
     pub prefix: Option<String>,
 }
 
@@ -135,30 +134,26 @@ fn get_generation_layout() -> PomResult<Vec<GenerationLayoutEntry>> {
 }
 
 fn get_generation_layout_from_file(generation_layout_file_path: &str) -> PomResult<TomlOutput> {
-    let generation_layout_str = match fs::read_to_string(generation_layout_file_path) {
+    let generation_layout_file_path = PathBuf::from(generation_layout_file_path); //TODO Check if the argument type could not change
+
+    let generation_layout_str = match read_file(&generation_layout_file_path) {
         Ok(generation_layout_str) => generation_layout_str,
-        Err(src) => {
-            return match src.kind() {
-                ErrorKind::NotFound => {
+        Err((code, hint)) => {
+            return match code {
+                PomErrorCode::FilesystemReadTargetNotFound => {
                     Err((PomErrorCode::GenerationLayoutFileCandidateNotFound, None))
                 }
-                _ => Err((
-                    PomErrorCode::GenerationLayoutFileCantOpen,
-                    Some(src.to_string()), // `src` type is `Error` which implement `Display`
-                )),
+                _ => Err((PomErrorCode::GenerationLayoutFileCantOpen, hint)),
             };
         }
     };
 
-    let generation_layout: TomlOutput = match toml::from_str(&generation_layout_str) {
-        Ok(generation_layout) => generation_layout,
-        Err(src) => {
-            return Err((
-                PomErrorCode::GenerationLayoutFileCantRead,
-                Some(src.to_string()), // `src` type is `Error` which implement `Display`
-            ));
-        }
-    };
+    let generation_layout: TomlOutput = toml::from_str(&generation_layout_str).map_err(|e| {
+        (
+            PomErrorCode::GenerationLayoutFileCantRead,
+            Some(e.to_string()),
+        )
+    })?;
 
     Ok(generation_layout)
 }
@@ -180,7 +175,7 @@ fn get_module_level_spec(
 ) -> Option<ModuleLevelSpec> {
     if generation_layout_entry.contains_modules {
         Some(ModuleLevelSpec {
-            path: generation_layout_entry.path.to_string(),
+            path: generation_layout_entry.path.clone(),
             prefix: generation_layout_entry.module_prefix.clone(),
         })
     } else {
