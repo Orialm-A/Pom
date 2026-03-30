@@ -60,7 +60,8 @@ pub fn resolve_old_module_name(
             Some(old_name_normalized),
         ));
     } else if number_of_modules > 1 {
-        module_location = select_module(&search_result)?;
+        let available_modules: Vec<String> = search_result.get_all_locations_as_text();
+        module_location = select_module(&available_modules)?;
     } else {
         module_location = search_result.get_unique_location()?;
     }

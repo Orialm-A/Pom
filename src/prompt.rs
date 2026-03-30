@@ -96,10 +96,10 @@ pub fn select_module_level(
     Ok((available_levels[&selected_key].clone(), selected_key))
 }
 
-pub fn select_module(available_modules: &ModulesFound) -> PomResult<PathBuf> {
-    let keys: Vec<String> = available_modules.get_all_locations_as_text();
+// pub fn select_module(available_modules: &ModulesFound) -> PomResult<PathBuf> {
+pub fn select_module(available_modules: &[String]) -> PomResult<PathBuf> {
 
-    let selected_key = menu_helper(keys, "Several modules found. Select the correct location")?;
+    let selected_key = menu_helper(available_modules, "Several modules found. Select the correct location")?;
 
     Ok(selected_key.into())
 }
@@ -116,7 +116,8 @@ fn menu_helper_deprecated(mut keys: Vec<&String>, prompt_hint: &str) -> PomResul
     Ok(keys[selection].clone())
 }
 
-fn menu_helper(mut items: Vec<String>, prompt_hint: &str) -> PomResult<String> {
+fn menu_helper(items: &[String], prompt_hint: &str) -> PomResult<String> {
+    let mut items = items.to_vec();
     items.sort();
 
     let selection = Select::with_theme(&ColorfulTheme::default())
