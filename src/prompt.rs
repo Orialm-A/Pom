@@ -3,7 +3,7 @@
 //! Prompt user for missing information
 
 use crate::errors::{PomErrorCode, PomResult};
-use crate::filesystem::ModulesFound;
+use crate::filesystem::module_search::ModulesFound; //TODO Should prompt really have access to this???
 use crate::project_layout::{ModuleLevelSpec, ModuleLevelsMap};
 use dialoguer::{Confirm, Input, Select, theme::ColorfulTheme};
 // use yes_or_no::yes_or_no;

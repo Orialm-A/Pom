@@ -35,14 +35,14 @@ pub enum PomErrorCode {
     FilesystemDirCreationFail = 300,
     FilesystemFileCreationFail = 301,
     FilesystemFileWriteFail = 302,
-    FilesystemFileReadFail = 303,
+    // FilesystemFileReadFail = 303,
     FilesystemEntryInvalid = 304,
     FilesystemStripPathPrefixFail = 305,
     FilesystemUnsupportedEntryType = 306,
     FilesystemCopySourceMissing = 307,
     FilesystemCopySourceNotDir = 308,
     FilesystemCopyFail = 309,
-    FilesystemFileOverwriteForbidded = 310,
+    FilesystemFileOverwriteForbidden = 310,
     FileSystemModuleSearchResultNotUnique = 311,
     FileSystemModuleSearchResultKeyNotFound = 312,
     FilesystemRenameOriginNotFound = 313,
@@ -113,14 +113,14 @@ impl PomErrorCode {
             Self::FilesystemDirCreationFail => "Failed to create directory.",
             Self::FilesystemFileCreationFail => "Failed to create file.",
             Self::FilesystemFileWriteFail => "Failed to write file.",
-            Self::FilesystemFileReadFail => "Failed to read file.",
+            // Self::FilesystemFileReadFail => "Failed to read file.",
             Self::FilesystemEntryInvalid => "Invalid directory entry found.",
             Self::FilesystemStripPathPrefixFail => "Failed to strip path prefix.",
             Self::FilesystemUnsupportedEntryType => "Unsupported filesystem entry type found.",
             Self::FilesystemCopySourceMissing => "Copy source is missing.",
             Self::FilesystemCopySourceNotDir => "Copy source is not a directory.",
             Self::FilesystemCopyFail => "Copy failed.",
-            Self::FilesystemFileOverwriteForbidded => {
+            Self::FilesystemFileOverwriteForbidden => {
                 "File copy or creation failed because overwrite is forbidden by policy."
             }
             Self::FileSystemModuleSearchResultNotUnique => {

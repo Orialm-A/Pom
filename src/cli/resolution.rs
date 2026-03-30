@@ -1,5 +1,6 @@
 use crate::errors::{PomErrorCode, PomResult};
-use crate::filesystem::{EntryKind, ModuleFiles, search_module, validate_dir_entry};
+use crate::filesystem::browsing::{EntryKind, validate_dir_entry};
+use crate::filesystem::module_search::{ModuleFiles, search_module};
 use crate::project_layout::ModuleLevelsMap;
 use crate::prompt::{
     prompt_if_missing_string, select_module, select_module_level, select_target, slugify_snake,
@@ -49,7 +50,7 @@ pub fn resolve_old_module_name(
 
     let search_result = search_module(&old_name_normalized, project_root, search_scope)?;
 
-    let number_of_modules = search_result.get_number_of_modules();
+    let number_of_modules = search_result.len();
 
     let module_location: PathBuf;
 
