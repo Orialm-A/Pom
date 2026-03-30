@@ -16,9 +16,10 @@ It focuses on **structure, layering and long-term maintainability** rather than 
 
 Pom is currently in **alpha**:
 
-- Only two commands are implemented:
-  - `pom project create`
-  - `pom module add`
+- Only three commands are implemented:
+  - `pom project create` --> Create a project filesystem
+  - `pom module add` --> Add a C module to the project
+  - `pom module rename` --> Rename a C module
 - There is **no installation or distribution mechanism yet**
 - It is not intended for external usage at this stage
 - The content of the next release is not decided
@@ -32,6 +33,7 @@ This repository mainly documents ongoing development.
 ```bash
 pom project create [NAME] [--path PATH] [--target TARGET] [--dry-run]
 pom module add [NAME] [--layer LAYER] [--brief TEXT] [--details TEXT] [--dry-run]
+pom module rename [OLD_NAME] [NEW_NAME] [--yes]
 ```
 
 Other commands (`build`, `flash`, `monitor`, `clean`, etc.) exist in the CLI structure but are not implemented yet.
