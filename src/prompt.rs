@@ -3,7 +3,6 @@
 //! Prompt user for missing information
 
 use crate::errors::{PomErrorCode, PomResult};
-use crate::filesystem::module_search::ModulesFound; //TODO Should prompt really have access to this???
 use crate::project_layout::{ModuleLevelSpec, ModuleLevelsMap};
 use dialoguer::{Confirm, Input, Select, theme::ColorfulTheme};
 // use yes_or_no::yes_or_no;
@@ -68,7 +67,7 @@ pub fn slugify_snake(input: &str) -> String {
 
 /// Select a target from a menu
 pub fn select_target(available_targets: &HashMap<String, PathBuf>) -> PomResult<PathBuf> {
-    let keys: Vec<&String> = available_targets.keys().collect();
+    let keys: Vec<String> = available_targets.keys().cloned().collect();
 
     if keys.is_empty() {
         return Err((
@@ -77,8 +76,8 @@ pub fn select_target(available_targets: &HashMap<String, PathBuf>) -> PomResult<
         ));
     }
 
-    let selected_key = menu_helper_deprecated(
-        keys,
+    let selected_key = menu_helper(
+        &keys,
         "Typed target not found. Select one of the available targets",
     )?;
     Ok(available_targets[&selected_key].clone())
@@ -88,9 +87,9 @@ pub fn select_target(available_targets: &HashMap<String, PathBuf>) -> PomResult<
 pub fn select_module_level(
     available_levels: &ModuleLevelsMap,
 ) -> PomResult<(ModuleLevelSpec, String)> {
-    let keys: Vec<&String> = available_levels.keys().collect();
-    let selected_key = menu_helper_deprecated(
-        keys,
+    let keys: Vec<String> = available_levels.keys().cloned().collect();
+    let selected_key = menu_helper(
+        &keys,
         "Typed level not found. Select one from availables in `pom.toml`",
     )?;
     Ok((available_levels[&selected_key].clone(), selected_key))
@@ -98,22 +97,12 @@ pub fn select_module_level(
 
 // pub fn select_module(available_modules: &ModulesFound) -> PomResult<PathBuf> {
 pub fn select_module(available_modules: &[String]) -> PomResult<PathBuf> {
-
-    let selected_key = menu_helper(available_modules, "Several modules found. Select the correct location")?;
+    let selected_key = menu_helper(
+        available_modules,
+        "Several modules found. Select the correct location",
+    )?;
 
     Ok(selected_key.into())
-}
-
-fn menu_helper_deprecated(mut keys: Vec<&String>, prompt_hint: &str) -> PomResult<String> {
-    keys.sort();
-    let selection = Select::with_theme(&ColorfulTheme::default())
-        .with_prompt(prompt_hint)
-        .items(&keys)
-        .default(0)
-        .interact()
-        .map_err(|e| (PomErrorCode::PromptSelectionFail, Some(e.to_string())))?;
-
-    Ok(keys[selection].clone())
 }
 
 fn menu_helper(items: &[String], prompt_hint: &str) -> PomResult<String> {

@@ -134,7 +134,6 @@ fn get_generation_layout() -> PomResult<Vec<GenerationLayoutEntry>> {
 }
 
 fn get_generation_layout_from_file(generation_layout_file_path: &Path) -> PomResult<TomlOutput> {
-
     let generation_layout_str = match read_file(generation_layout_file_path) {
         Ok(generation_layout_str) => generation_layout_str,
         Err((code, hint)) => {
