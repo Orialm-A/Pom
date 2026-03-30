@@ -64,3 +64,9 @@ impl PathList for Vec<PathBuf> {
         self.as_slice().iter_paths()
     }
 }
+
+impl<const N: usize> PathList for [PathBuf; N] {
+    fn iter_paths(&self) -> Box<dyn Iterator<Item = &Path> + '_> {
+        Box::new(self.iter().map(|p| p.as_path()))
+    }
+}

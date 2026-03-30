@@ -186,3 +186,102 @@ pub fn search_module(
     }
     Ok(found)
 }
+
+#[cfg(test)]
+
+mod module_search_tests {
+    use super::*;
+    use crate::filesystem::io_ops::{ExistingFilePolicy, create_directories, write_file};
+    use tempfile::tempdir;
+
+    fn create_test_file_tree() -> (tempfile::TempDir, PathBuf) {
+        let temp_dir = tempdir().unwrap();
+        let project_root = temp_dir.path().join("project_root");
+
+        // let directories_collection: Vec<PathBuf> = Vec::from([
+        let directories_collection = [
+            project_root.join("src/services"),
+            project_root.join("src/peripherals"),
+            project_root.join("unit_tests"),
+        ];
+        create_directories(&directories_collection).unwrap();
+
+        let files_collection = [
+            project_root.join("src/services/timer.h"),
+            project_root.join("src/services/timer.c"),
+            project_root.join("src/peripherals/timer.c"),
+            project_root.join("src/peripherals/tim.h"),
+            project_root.join("unit_tests/timer.h"),
+            project_root.join("unit_tests/tests_timer.c"),
+        ];
+
+        for file in files_collection {
+            write_file(&file, "", &ExistingFilePolicy::Overwrite).unwrap();
+        }
+
+        (temp_dir, project_root)
+    }
+
+    fn expected_timer_research_result() -> ModulesFound {
+        let mut expected = ModulesFound::new();
+        expected.insert_header(&PathBuf::from("src/services"));
+        expected.insert_source(&PathBuf::from("src/services"));
+        expected.insert_source(&PathBuf::from("src/peripherals"));
+        expected.insert_header(&PathBuf::from("unit_tests"));
+
+        expected
+    }
+
+    #[test]
+    fn find_all_modules_complete_or_not() {
+        let (_temp_dir, project_root) = create_test_file_tree();
+
+        let mut search_scope = HashSet::new();
+        search_scope.insert(PathBuf::from("src"));
+        search_scope.insert(PathBuf::from("unit_tests"));
+
+        let result = search_module("timer", &project_root, &search_scope).unwrap();
+
+        assert_eq!(result, expected_timer_research_result());
+    }
+
+    #[test]
+    fn count_number_of_modules_found() {
+        let search_result = expected_timer_research_result();
+        assert_eq!(search_result.len(), 3);
+    }
+
+    #[test]
+    fn dont_select_unique_location_if_several_available() {
+        let search_result = expected_timer_research_result();
+        assert_eq!(
+            search_result.get_unique_location().unwrap_err().0,
+            PomErrorCode::FileSystemModuleSearchResultNotUnique
+        );
+    }
+
+    #[test]
+    fn correctly_get_all_locations_as_text() {
+        let search_result = expected_timer_research_result();
+        let mut locations = search_result.get_all_locations_as_text();
+        locations.sort();
+        let expected_locations: Vec<String> = Vec::from([
+            "src/peripherals".to_string(),
+            "src/services".to_string(),
+            "unit_tests".to_string(),
+        ]);
+
+        assert_eq!(locations, expected_locations);
+    }
+
+    #[test]
+    fn get_module_files_returns_error_if_location_not_found() {
+        let search_result = expected_timer_research_result();
+        let wrong_location = PathBuf::from("testsuite");
+        let (error_code, _) = search_result.get_module_files(&wrong_location).unwrap_err();
+        assert_eq!(
+            error_code,
+            PomErrorCode::FileSystemModuleSearchResultKeyNotFound
+        );
+    }
+}
