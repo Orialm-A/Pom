@@ -30,7 +30,7 @@ pub enum ExistingFilePolicy {
 /// - `dirs_paths` - Directories to create
 ///
 /// # Errors
-/// - `PomErrorCode::FilesystemDirCreationFail` if a directory creation failed due to an OS error
+/// - `PomErrorCode::FilesystemDirCreationFail` if a directory creation fails due to an OS error
 pub fn create_directories(dirs_paths: &(impl path_list::PathList + ?Sized)) -> PomResult<()> {
     // Read parameter type as "A reference to a type implementing `PathList`"
     for dir_path in dirs_paths.iter_paths() {
@@ -167,7 +167,7 @@ pub fn copy_with_rendering_helper(
 /// # Errors
 /// - `PomErrorCode::FilesystemReadTargetNotFound` if the target does not exist
 /// - `PomErrorCode::FilesystemReadNotFile` if the target is not a file
-/// - `PomErrorCode::FilesystemReadFailed` if reading failed due to an OS error
+/// - `PomErrorCode::FilesystemReadFailed` if readingfails due to an OS error
 pub fn read_file(file_path: &Path) -> PomResult<String> {
     if !file_path.exists() {
         return Err((

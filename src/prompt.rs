@@ -1,18 +1,26 @@
-//! Prompt module
+//! User prompts.
 //!
-//! Prompt user for missing information
+//! Provides all the user to get user input at runtime.
 
 use crate::errors::{PomErrorCode, PomResult};
 use crate::project_layout::{ModuleLevelSpec, ModuleLevelsMap};
 use dialoguer::{Confirm, Input, Select, theme::ColorfulTheme};
-// use yes_or_no::yes_or_no;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use unicode_normalization::UnicodeNormalization;
 
-/// Prompt the user for a string if the passed one is `None`
+/// Prompt the user for a string if the passed one is `None`.
 ///
-/// May error `PomErrorCode::PromptStringFail`
+/// # Arguments
+/// - `optional_string` - The string that may be missing
+/// - `prompt_hint` - Prompt shown to the user
+/// - `empty_string_allowed` - Allow the user to continue without typing anything
+///
+/// # Returns
+/// The string wrapped if `optional_string` if available, or the one typed by the user.
+///
+/// # Errors
+/// - `PomErrorCode::PromptStringFail` if the prompt fails due to an OS error
 pub fn prompt_if_missing_string(
     optional_string: Option<String>,
     prompt_hint: &str,
@@ -31,11 +39,18 @@ pub fn prompt_if_missing_string(
     }
 }
 
-/// Convert a string into a snake_case, alpha-numeric only slug
+/// Convert a string into a snake_case slug.
 ///
-/// Replaces accentuated letters with non-accentuated equivalent
-/// Replace punctuations with `_`
-/// Removes other characters (emoji, sharp...)
+/// The resulting slug:
+/// - uses snake_case
+/// - replaces accented letters (e.g. `é` → `e`)
+/// - replaces punctuation with `_`
+/// - removes unsupported special characters
+/// - collapses consecutive `_` into a single `_`
+/// - trims leading and trailing `_`
+///
+/// # Arguments
+/// - `input` - The text to slugify; It is not modified in place
 pub fn slugify_snake(input: &str) -> String {
     let mut normalized_string = String::new();
     let mut last_was_underscore = false;
@@ -65,7 +80,16 @@ pub fn slugify_snake(input: &str) -> String {
     normalized_string
 }
 
-/// Select a target from a menu
+/// Prompt the user to select a target from a menu
+///
+/// # Arguments
+/// - `available_targets` - Mapping of target names to paths
+///
+/// # Returns
+/// Path to the selected target.
+///
+/// # Errors
+/// - `PomErrorCode::FileTemplateMissing` if the map is empty
 pub fn select_target(available_targets: &HashMap<String, PathBuf>) -> PomResult<PathBuf> {
     let keys: Vec<String> = available_targets.keys().cloned().collect();
 
@@ -83,7 +107,16 @@ pub fn select_target(available_targets: &HashMap<String, PathBuf>) -> PomResult<
     Ok(available_targets[&selected_key].clone())
 }
 
-/// Select a module level from a menu
+/// Prompt the user to select a module level from a menu.
+///
+/// # Arguments
+/// - `available_targets` - Mapping of module level names to their specs
+///
+/// # Returns
+/// Specs of the selected module level.
+///
+/// # Errors
+/// - Propagates promt-relate errors encountered during execution
 pub fn select_module_level(
     available_levels: &ModuleLevelsMap,
 ) -> PomResult<(ModuleLevelSpec, String)> {
@@ -95,7 +128,16 @@ pub fn select_module_level(
     Ok((available_levels[&selected_key].clone(), selected_key))
 }
 
-// pub fn select_module(available_modules: &ModulesFound) -> PomResult<PathBuf> {
+/// Prompt the user to select a module location from a menu.
+///
+/// # Arguments
+/// - `available_modules` - Paths to the available module locations
+///
+/// # Returns
+/// Path to the selected module location.
+///
+/// # Errors
+/// - Propagates promt-relate errors encountered during execution
 pub fn select_module(available_modules: &[String]) -> PomResult<PathBuf> {
     let selected_key = menu_helper(
         available_modules,
@@ -105,6 +147,19 @@ pub fn select_module(available_modules: &[String]) -> PomResult<PathBuf> {
     Ok(selected_key.into())
 }
 
+/// Prompt the user to select an entry in a menu.
+///
+/// This function order the entries alphabetically
+///
+/// # Arguments
+/// - `items` - Collection of menu entries
+/// - `prompt_hint` - Prompt shown to the user
+///
+/// # Returns
+/// The selected entry.
+///
+/// # Errors
+/// - `PomErrorCode::PromptSelectionFail` if the prompt fails due to an OS error
 fn menu_helper(items: &[String], prompt_hint: &str) -> PomResult<String> {
     let mut items = items.to_vec();
     items.sort();
@@ -119,12 +174,13 @@ fn menu_helper(items: &[String], prompt_hint: &str) -> PomResult<String> {
     Ok(items[selection].clone())
 }
 
-/// Prompt the user for a confirmation
+/// Prompt the user for confirmation.
 ///
-/// Returns the choice as a `bool`.
+/// # Arguments
+/// - `prompt_hint` - Prompt shown to the user
 ///
 /// # Errors
-/// - `PomErrorCode::PromptConfirmationFail` if the prompt failed
+/// - `PomErrorCode::PromptSelectionFail` if the prompt fails due to an OS error
 pub fn confirm(prompt_hint: &str) -> PomResult<bool> {
     let result = Confirm::with_theme(&ColorfulTheme::default())
         .with_prompt(prompt_hint)
