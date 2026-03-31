@@ -17,7 +17,7 @@ use dialoguer::{Confirm, Input, Select, theme::ColorfulTheme};
 ///
 /// # Errors
 /// - `PomErrorCode::PromptStringFail` if the prompt fails due to an OS error
-pub fn prompt_if_missing_string(
+pub fn input_text(
     optional_string: Option<String>,
     prompt_hint: &str,
     empty_string_allowed: bool,

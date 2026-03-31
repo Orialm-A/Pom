@@ -3,7 +3,7 @@
 //! This Rust module is used to add a C module to a pom project
 
 use crate::cli::resolution::{
-    resolve_module_brief, resolve_module_details, resolve_module_level, resolve_new_module_name,
+    resolve_doxygen_brief, resolve_doxygen_details, resolve_module_level, resolve_new_module_name,
     resolve_project_root,
 };
 use crate::errors::{PomErrorCode, PomResult};
@@ -36,13 +36,13 @@ pub fn module_add(
     let (module_name_normalized, module_header_guard) =
         resolve_new_module_name(module_name, &module_prefix)?;
 
-    let brief_raw = resolve_module_brief(brief)?;
+    let brief_raw = resolve_doxygen_brief(brief)?;
     let brief = if brief_raw.is_empty() {
         String::new()
     } else {
         format!("@brief {}", brief_raw)
     };
-    let details = resolve_module_details(details)?;
+    let details = resolve_doxygen_details(details)?;
 
     let current_year = chrono::Local::now().year().to_string();
 
