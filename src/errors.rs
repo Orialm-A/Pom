@@ -73,6 +73,8 @@ pub enum PomErrorCode {
     ModuleDestinationDirNotDir = 75,
     // Module rename: 8x
     ModuleRenameNotFound = 80,
+    // Module names: 9x
+    ModuleNameAlreadyUsed = 90,
 }
 
 impl PomErrorCode {
@@ -165,6 +167,9 @@ impl PomErrorCode {
 
             // Module rename errors
             Self::ModuleRenameNotFound => "Did not found any module with this name.",
+
+            // Module names errors
+            Self::ModuleNameAlreadyUsed => "This name is already used for another module in the project.",
 
             // Fallback
             _ => "Internal: A non-critical error was handled as fatal. This is a Pom bug.",

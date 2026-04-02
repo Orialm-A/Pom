@@ -20,7 +20,7 @@ impl PomToml {
     /// Get the set of root directories of all levels path
     ///
     /// May error `PomErrorCode::PomTomlLevelPathNotNormal`
-    pub fn get_modules_roots(self) -> PomResult<HashSet<PathBuf>> {
+    pub fn get_modules_roots(&self) -> PomResult<HashSet<PathBuf>> {
         let levels_iterator: Vec<&ModuleLevelSpec> = self.levels.values().collect();
         let mut module_roots_set = HashSet::new();
 

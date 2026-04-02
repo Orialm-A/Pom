@@ -36,7 +36,7 @@ pub fn module_rename(
     let (module_path, old_module_name_normalized, old_header_guard, module_files) =
         resolve_old_module_name(old_module_name, &project_root, &sources_roots_set)?;
     let (new_module_name_normalized, new_header_guard) =
-        resolve_new_module_name(new_module_name, &None)?;
+        resolve_new_module_name(new_module_name, &None, &project_root, &sources_roots_set)?;
     let skip_confirmation = if skip_confirmation { Some(true) } else { None };
 
     let rename_context = ModuleRenameContext {

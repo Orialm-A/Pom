@@ -53,6 +53,7 @@ pub fn module_add(
     // Check project
     let project_root = resolve_project_root(None)?;
     let project_toml = resolve_project_toml(&project_root)?;
+    let sources_roots_set = project_toml.get_modules_roots()?;
 
     // Resolve user parameters
     let (module_path, module_prefix, level_group) =
@@ -63,7 +64,7 @@ pub fn module_add(
     let module_prefix = if no_prefix { None } else { module_prefix };
 
     let (module_name_normalized, module_header_guard) =
-        resolve_new_module_name(module_name, &module_prefix)?;
+        resolve_new_module_name(module_name, &module_prefix, &project_root, &sources_roots_set)?;
 
     let brief_raw = resolve_doxygen_brief(brief)?;
     let brief = if brief_raw.is_empty() {
