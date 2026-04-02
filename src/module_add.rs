@@ -1,9 +1,10 @@
-//! "module add" module
+//! `module add` command implementation.
 //!
-//! This Rust module is used to add a C module to a pom project
+//! Provides the CLI entry point and supporting functions to create a new C
+//! module in a Pom project from templates.
 
 use crate::cli::resolution::{
-    resolve_module_brief, resolve_module_details, resolve_module_level, resolve_new_module_name,
+    resolve_doxygen_brief, resolve_doxygen_details, resolve_module_level, resolve_new_module_name,
     resolve_project_root,
 };
 use crate::errors::{PomErrorCode, PomResult};
@@ -13,6 +14,34 @@ use crate::template_rendering::{FieldKey, TemplateFields};
 use chrono::Datelike;
 use std::path::{Path, PathBuf};
 
+/// CLI entry point for the `module add` command.
+///
+/// Creates a new module by generating its `*.h` and `*.c` files from templates.
+///
+/// This function:
+/// - resolves the project root and loads `pom.toml`
+/// - determines the target module level and directory
+/// - normalizes the module name and generates its header guard
+/// - prepares template fields (Doxygen tags, year, etc.)
+/// - locates the module templates source
+/// - creates the module files (unless `dry_run` is enabled)
+///
+/// # Arguments
+///
+/// - `module_name` - Name of the module to create (prompted if `None`)
+/// - `level` - Target level/layer for the module (prompted if `None`)
+/// - `brief` - Optional Doxygen `@brief` description
+/// - `details` - Optional Doxygen detailed description
+/// - `no_prefix` - If `true`, disables the level-based module name prefix
+/// - `dry_run` - If `true`, resolves everything but does not create any files
+///
+/// # Errors
+///
+/// Propagates any error that occurs during:
+/// - project resolution
+/// - parameter resolution
+/// - template source resolution
+/// - file creation
 pub fn module_add(
     module_name: Option<String>,
     level: Option<String>,
@@ -24,6 +53,7 @@ pub fn module_add(
     // Check project
     let project_root = resolve_project_root(None)?;
     let project_toml = resolve_project_toml(&project_root)?;
+    let sources_roots_set = project_toml.get_modules_roots()?;
 
     // Resolve user parameters
     let (module_path, module_prefix, level_group) =
@@ -33,16 +63,20 @@ pub fn module_add(
 
     let module_prefix = if no_prefix { None } else { module_prefix };
 
-    let (module_name_normalized, module_header_guard) =
-        resolve_new_module_name(module_name, &module_prefix)?;
+    let (module_name_normalized, module_header_guard) = resolve_new_module_name(
+        module_name,
+        &module_prefix,
+        &project_root,
+        &sources_roots_set,
+    )?;
 
-    let brief_raw = resolve_module_brief(brief)?;
+    let brief_raw = resolve_doxygen_brief(brief)?;
     let brief = if brief_raw.is_empty() {
         String::new()
     } else {
         format!("@brief {}", brief_raw)
     };
-    let details = resolve_module_details(details)?;
+    let details = resolve_doxygen_details(details)?;
 
     let current_year = chrono::Local::now().year().to_string();
 
@@ -70,15 +104,30 @@ pub fn module_add(
     Ok(())
 }
 
+/// Return the directory containing the module file templates.
+///
+/// Candidate sources are tested in priority order:
+/// 1. Default source embedded in Pom
+///
+/// More sources may be added later.
+///
+/// A valid source is a directory containing both `template.c.pomrt` and
+/// `template.h.pomrt`.
+///
+/// # Errors
+///
+/// Returns:
+/// - `PomErrorCode::ModuleTemplateCouldNotFindAny` if no valid source is found
+// TESTING: logic tested for `validate_module_template_dir()`; not unit-tested directly.
 fn get_module_source() -> PomResult<PathBuf> {
-    const MODULE_TEMPLATES_DEFAULT_SOURCE: &str = "assets/module_templates";
-    let candidates: [&str; 1] = [MODULE_TEMPLATES_DEFAULT_SOURCE];
+    let module_templates_default_source = PathBuf::from("assets/module_templates");
+    let candidates: [PathBuf; 1] = [module_templates_default_source];
 
     for candidate in candidates {
-        let root = Path::new(candidate);
+        // let root = Path::new(candidate);
 
-        match validate_module_template_dir(root) {
-            Ok(()) => return Ok(root.to_path_buf()),
+        match validate_module_template_dir(&candidate) {
+            Ok(()) => return Ok(candidate),
 
             Err((PomErrorCode::ModuleTemplateSourceNotFound, _)) => continue,
 
@@ -90,6 +139,18 @@ fn get_module_source() -> PomResult<PathBuf> {
     Err((PomErrorCode::ModuleTemplateCouldNotFindAny, None))
 }
 
+/// Check whether a module template source directory is valid.
+///
+/// A valid source is a directory containing both `template.c.pomrt` and
+/// `template.h.pomrt`.
+///
+/// # Errors
+///
+/// Returns:
+/// - `PomErrorCode::ModuleTemplateSourceNotFound` if `root` does not exist
+/// - `PomErrorCode::ModuleTemplateSourceNotDir` if `root` is not a directory
+/// - `PomErrorCode::ModuleTemplateMissing` if one of the required template files
+///   is missing
 fn validate_module_template_dir(root: &Path) -> PomResult<()> {
     if !root.exists() {
         return Err((
@@ -123,6 +184,27 @@ fn validate_module_template_dir(root: &Path) -> PomResult<()> {
     Ok(())
 }
 
+/// Create the `*.h` and `*.c` files for a new module.
+///
+/// Files are created from the templates located in `source_path`.
+/// Template fields are rendered using the values provided in `fields`.
+///
+/// If a field name in a template is invalid, or if its value is missing in
+/// `fields`, the placeholder is left unchanged and file creation continues.
+///
+/// # Arguments
+///
+/// - `module_name` - Name of the module to create
+/// - `source_path` - Path to the module file templates
+/// - `module_path` - Path to the directory where the module must be created
+/// - `fields` - Values used to render template fields
+///
+/// # Errors
+///
+/// Returns:
+/// - `PomErrorCode::ModuleDestinationDirNotFound` if `module_path` does not exist
+/// - `PomErrorCode::ModuleDestinationDirNotDir` if `module_path` is not a directory
+/// - Propagates any error returned by `copy_with_rendering_helper()`.
 fn create_module_files(
     module_name: &str,
     source_path: &Path,
@@ -204,7 +286,7 @@ mod tests {
     }
 
     #[test]
-    fn create_module_files_creates_c_and_h() {
+    fn creates_module_c_and_h_files() {
         let templates = tempdir().unwrap();
         let out = tempdir().unwrap();
 

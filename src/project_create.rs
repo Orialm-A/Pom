@@ -17,7 +17,7 @@ pub fn project_create(
 ) -> PomResult<()> {
     // Resolve user parameters
     let project_root = resolve_project_root(project_root_parameter)?;
-    let (project_name, project_name_normalized, _) = resolve_project_name(project_name_parameter)?;
+    let (project_name, project_name_normalized) = resolve_project_name(project_name_parameter)?;
     let project_root = project_root.join(&project_name_normalized);
 
     let project_target = resolve_project_target(project_target_parameter)?;

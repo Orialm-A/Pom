@@ -32,7 +32,7 @@ pub struct ValidatedEntry {
 ///
 /// # Errors
 /// - `PomErrorCode::FilesystemEntryInvalid` if the entry is invalid due to an OS reason
-/// - `PomErrorCode::FilesystemStripPathPrefixFail` if relative path extraction failed
+/// - `PomErrorCode::FilesystemStripPathPrefixFail` if relative path extractionfails
 /// - `PomErrorCode::FilesystemUnsupportedEntryType` if the entry type is not supported by Pom
 pub fn validate_dir_entry(
     entry: Result<walkdir::DirEntry, walkdir::Error>,

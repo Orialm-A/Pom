@@ -1,6 +1,7 @@
 mod cli;
 mod errors;
 mod filesystem;
+mod format_text;
 mod module_add;
 mod module_rename;
 mod pom_api;
