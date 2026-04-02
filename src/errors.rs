@@ -169,7 +169,9 @@ impl PomErrorCode {
             Self::ModuleRenameNotFound => "Did not found any module with this name.",
 
             // Module names errors
-            Self::ModuleNameAlreadyUsed => "This name is already used for another module in the project.",
+            Self::ModuleNameAlreadyUsed => {
+                "This name is already used for another module in the project."
+            }
 
             // Fallback
             _ => "Internal: A non-critical error was handled as fatal. This is a Pom bug.",

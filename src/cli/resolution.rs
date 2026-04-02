@@ -3,7 +3,7 @@ use crate::filesystem::browsing::{EntryKind, validate_dir_entry};
 use crate::filesystem::module_search::{ModuleFiles, search_module};
 use crate::format_text::{get_const_case, get_slug};
 use crate::project_layout::{ModuleLevelSpec, ModuleLevelsMap};
-use crate::prompt::{input_text, select, confirm};
+use crate::prompt::{confirm, input_text, select};
 
 use std::collections::{HashMap, HashSet};
 use std::env;
@@ -21,16 +21,14 @@ use walkdir::WalkDir;
 /// A tuple containing:
 /// - the project name as entered by the user
 /// - the slugified project name
-/// - the project name in `CONSTANT_CASE`
 ///
 /// # Errors
 /// - Propagates resolution-related errors encountered during execution
 // TESTING: Thin wrapper; not unit-tested directly.
-pub fn resolve_project_name(
-    project_name_parameter: Option<String>,
-) -> PomResult<(String, String, String)> {
-    // TODO: Remove third return value; update call sites
-    resolve_name(project_name_parameter, "Project name")
+pub fn resolve_project_name(project_name_parameter: Option<String>) -> PomResult<(String, String)> {
+    let (project_name_normal, project_name_slug, _) =
+        resolve_name(project_name_parameter, "Project name")?;
+    Ok((project_name_normal, project_name_slug))
 }
 
 /// Resolve a new module name from CLI input or user prompt.
@@ -72,17 +70,23 @@ pub fn resolve_new_module_name(
     let number_of_results = search_result.len();
 
     if number_of_results != 0 {
-        println!("{} module(s) have been found with the name `{}` in the project:", number_of_results, normalized_module_name);
+        println!(
+            "{} module(s) have been found with the name `{}` in the project:",
+            number_of_results, normalized_module_name
+        );
         let other_modules_location = search_result.get_all_locations_as_text();
         for module_location in other_modules_location {
             println!(" - {}", module_location);
         }
-        let confirm_hint = format!("Do you want to use the name `{}` for this new module?", normalized_module_name);
+        let confirm_hint = format!(
+            "Do you want to use the name `{}` for this new module?",
+            normalized_module_name
+        );
         let confirm_name = confirm(&confirm_hint)?;
         if !confirm_name {
             return Err((
                 PomErrorCode::ModuleNameAlreadyUsed,
-                Some(normalized_module_name)
+                Some(normalized_module_name),
             ));
         }
     }

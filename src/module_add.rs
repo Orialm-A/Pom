@@ -63,8 +63,12 @@ pub fn module_add(
 
     let module_prefix = if no_prefix { None } else { module_prefix };
 
-    let (module_name_normalized, module_header_guard) =
-        resolve_new_module_name(module_name, &module_prefix, &project_root, &sources_roots_set)?;
+    let (module_name_normalized, module_header_guard) = resolve_new_module_name(
+        module_name,
+        &module_prefix,
+        &project_root,
+        &sources_roots_set,
+    )?;
 
     let brief_raw = resolve_doxygen_brief(brief)?;
     let brief = if brief_raw.is_empty() {
@@ -234,8 +238,6 @@ fn create_module_files(
     Ok(())
 }
 
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -282,7 +284,6 @@ mod tests {
         let res = validate_module_template_dir(root);
         assert!(res.is_ok(), "expected Ok(()), got {:?}", res);
     }
-
 
     #[test]
     fn creates_module_c_and_h_files() {
