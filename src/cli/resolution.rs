@@ -3,7 +3,7 @@ use crate::filesystem::browsing::{EntryKind, validate_dir_entry};
 use crate::filesystem::module_search::{ModuleFiles, search_module};
 use crate::format_text::{get_const_case, get_slug};
 use crate::project_layout::{ModuleLevelSpec, ModuleLevelsMap};
-use crate::prompt::{input_text, select};
+use crate::prompt::{confirm, input_text, select};
 
 use std::collections::{HashMap, HashSet};
 use std::env;
@@ -21,26 +21,27 @@ use walkdir::WalkDir;
 /// A tuple containing:
 /// - the project name as entered by the user
 /// - the slugified project name
-/// - the project name in `CONSTANT_CASE`
 ///
 /// # Errors
 /// - Propagates resolution-related errors encountered during execution
 // TESTING: Thin wrapper; not unit-tested directly.
-pub fn resolve_project_name(
-    project_name_parameter: Option<String>,
-) -> PomResult<(String, String, String)> {
-    // TODO: Remove third return value; update call sites
-    resolve_name(project_name_parameter, "Project name")
+pub fn resolve_project_name(project_name_parameter: Option<String>) -> PomResult<(String, String)> {
+    let (project_name_normal, project_name_slug, _) =
+        resolve_name(project_name_parameter, "Project name")?;
+    Ok((project_name_normal, project_name_slug))
 }
 
 /// Resolve a new module name from CLI input or user prompt.
 ///
 /// If `module_name_parameter` is `None`, the user is prompted to enter a module name.
 /// If `module_prefix` is `Some(X)`,the slugified module name will take 'x_' at the beginning, the `CONST_CASE` name will take `X_` at the beginning.
+/// If the new name is already used by another module in the project, the user is prompted for confirmation.
 ///
 /// # Arguments
 /// - `module_name_parameter` - Optional module name provided via CLI
 /// - `module_prefix` - Optional layer-related prefix for files name
+/// - `project_root` - Path to the project root
+/// - `search_scope` - Directories to explore recursively
 ///
 /// # Returns
 /// A tuple containing:
@@ -52,6 +53,8 @@ pub fn resolve_project_name(
 pub fn resolve_new_module_name(
     module_name_parameter: Option<String>,
     module_prefix: &Option<String>,
+    project_root: &Path,
+    search_scope: &HashSet<PathBuf>,
 ) -> PomResult<(String, String)> {
     let (_, mut normalized_module_name, mut header_guard) =
         resolve_name(module_name_parameter, "Module name")?;
@@ -61,6 +64,31 @@ pub fn resolve_new_module_name(
     if let Some(module_prefix) = module_prefix {
         normalized_module_name = format!("{}_{}", module_prefix, normalized_module_name);
         header_guard = format!("{}_{}", get_const_case(module_prefix), header_guard);
+    }
+
+    let search_result = search_module(&normalized_module_name, project_root, search_scope)?;
+    let number_of_results = search_result.len();
+
+    if number_of_results != 0 {
+        println!(
+            "{} module(s) have been found with the name `{}` in the project:",
+            number_of_results, normalized_module_name
+        );
+        let other_modules_location = search_result.get_all_locations_as_text();
+        for module_location in other_modules_location {
+            println!(" - {}", module_location);
+        }
+        let confirm_hint = format!(
+            "Do you want to use the name `{}` for this new module?",
+            normalized_module_name
+        );
+        let confirm_name = confirm(&confirm_hint)?;
+        if !confirm_name {
+            return Err((
+                PomErrorCode::ModuleNameAlreadyUsed,
+                Some(normalized_module_name),
+            ));
+        }
     }
 
     Ok((normalized_module_name, header_guard))
@@ -483,8 +511,16 @@ mod tests {
 
         #[test]
         fn module_name_with_prefix() {
-            let result =
-                resolve_new_module_name(Some("Test Name".to_string()), &Some("a".to_string()));
+            let temp_dir = tempdir().unwrap();
+            let project_root = temp_dir.path().join("project_root");
+            let search_scope = std::collections::HashSet::new();
+
+            let result = resolve_new_module_name(
+                Some("Test Name".to_string()),
+                &Some("a".to_string()),
+                &project_root,
+                &search_scope,
+            );
             assert!(result.is_ok());
 
             let (module_name, header_guard) = result.unwrap();
@@ -495,7 +531,16 @@ mod tests {
 
         #[test]
         fn module_name_without_prefix() {
-            let result = resolve_new_module_name(Some("Test Name".to_string()), &None);
+            let temp_dir = tempdir().unwrap();
+            let project_root = temp_dir.path().join("project_root");
+            let search_scope = std::collections::HashSet::new();
+
+            let result = resolve_new_module_name(
+                Some("Test Name".to_string()),
+                &None,
+                &project_root,
+                &search_scope,
+            );
             assert!(result.is_ok());
 
             let (module_name, header_guard) = result.unwrap();
