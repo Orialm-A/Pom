@@ -249,7 +249,7 @@ prefix = "u"
 
             let temp_project_toml = resolve_project_toml(&temp_project_dir).unwrap();
 
-            let modules_roots = PomToml::get_modules_roots(temp_project_toml).unwrap();
+            let modules_roots = PomToml::get_modules_roots(&temp_project_toml).unwrap();
             let mut modules_roots_expected = HashSet::new();
             modules_roots_expected.insert(PathBuf::from("src"));
             modules_roots_expected.insert(PathBuf::from("unit_tests"));

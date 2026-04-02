@@ -511,8 +511,16 @@ mod tests {
 
         #[test]
         fn module_name_with_prefix() {
-            let result =
-                resolve_new_module_name(Some("Test Name".to_string()), &Some("a".to_string()));
+            let temp_dir = tempdir().unwrap();
+            let project_root = temp_dir.path().join("project_root");
+            let search_scope = std::collections::HashSet::new();
+
+            let result = resolve_new_module_name(
+                Some("Test Name".to_string()),
+                &Some("a".to_string()),
+                &project_root,
+                &search_scope,
+            );
             assert!(result.is_ok());
 
             let (module_name, header_guard) = result.unwrap();
@@ -523,7 +531,16 @@ mod tests {
 
         #[test]
         fn module_name_without_prefix() {
-            let result = resolve_new_module_name(Some("Test Name".to_string()), &None);
+            let temp_dir = tempdir().unwrap();
+            let project_root = temp_dir.path().join("project_root");
+            let search_scope = std::collections::HashSet::new();
+
+            let result = resolve_new_module_name(
+                Some("Test Name".to_string()),
+                &None,
+                &project_root,
+                &search_scope,
+            );
             assert!(result.is_ok());
 
             let (module_name, header_guard) = result.unwrap();
