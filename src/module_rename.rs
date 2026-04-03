@@ -1,6 +1,7 @@
-//! "module rename" module
+//! `module rename` command implementation.
 //!
-//! This Rust module is used to rename a C module in a pom project
+//! Provides the CLI entry point and supporting functions to rename a C
+//! module in a Pom project.
 
 use crate::cli::resolution::{
     resolve_new_module_name, resolve_old_module_name, resolve_project_root,
