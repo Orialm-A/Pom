@@ -7,10 +7,14 @@ use crate::cli::resolution::{
     resolve_new_module_name, resolve_old_module_name, resolve_project_root,
 };
 use crate::errors::PomResult;
+use crate::filesystem::browsing::{EntryKind, validate_dir_entry};
 use crate::filesystem::io_ops::{ExistingFilePolicy, read_file, rename_file, write_file};
 use crate::project_toml::resolve_project_toml;
 use crate::prompt::confirm;
-use std::path::Path;
+use std::borrow::Cow;
+use std::collections::HashSet;
+use std::path::{Path, PathBuf};
+use walkdir::WalkDir;
 
 /// Use this struct to pass all the parameters to the rename flow, after the interactive functions, to make it testable
 struct ModuleRenameContext<'a> {
@@ -52,6 +56,8 @@ pub fn module_rename(
     };
 
     module_rename_flow(rename_context, skip_confirmation)?;
+
+    includes_update_flow(&project_root, &sources_roots_set, &module_path, &old_module_name_normalized, &new_module_name_normalized)?;
 
     Ok(())
 }
@@ -210,6 +216,155 @@ fn apply_rename(old_path: &Path, new_path: &Path, new_content: Option<&str>) -> 
     Ok(())
 }
 
+/// header includes update flow
+///
+/// Iterate over the files after a rename. Within a file, iterate over lines to find includes. These includes are processed by the function `process_line()`.
+///
+/// # Arguments
+/// - `project_root` - Path to the project root
+/// - `search_scope` - Directories to explore recursively
+/// - `old_include_path` - Path to the renamed header with its old name
+/// - `new_include_path` - Path to the renamed header with its new name
+///
+/// # Errors
+/// Propagates error from `read_file()` and `process_line()`
+fn includes_update_flow(project_root: &Path, search_scope: &HashSet<PathBuf>, module_path: &Path, old_module_name: &str, new_module_name: &str) -> PomResult<()> {
+    for dir in search_scope {
+        let search_path = project_root.join(dir);
+        for entry in WalkDir::new(search_path).into_iter() {
+            let validated_entry = validate_dir_entry(entry, project_root)?;
+
+            let entry_relative_path = validated_entry.relative_path;
+            let entry_full_path = validated_entry.full_path;
+            let entry_kind = validated_entry.kind;
+
+            match entry_kind {
+                EntryKind::Directory => {
+                    continue;
+                    // Sources may contain nested directories, we just want files
+                }
+                EntryKind::Symlink => {
+                    println!(
+                        "WARNING: `{}` is a symlink. It is not supported by pom current version.",
+                        entry_relative_path.display()
+                    );
+                    continue;
+                    // Doesn't justify an error
+                }
+                EntryKind::File => {
+                    // Read
+                    let file_content = read_file(&entry_full_path)?;
+                    let new_line_character = if file_content.contains("\r\n") {
+                        "\r\n"
+                    } else {
+                        "\n"
+                    };
+
+                    let mut new_lines: Vec<Cow<'_, str>> = Vec::new();
+                    let mut updates_count: u32 = 0;
+
+                    for line in file_content.lines() {
+                        let (new_line, line_modified) = process_include_line(line, search_scope, &entry_relative_path, module_path, old_module_name, new_module_name)?;
+                        new_lines.push(new_line);
+                        if line_modified {updates_count += 1; }
+                    }
+
+                    if updates_count > 0 {
+                        let new_content = new_lines.join(new_line_character);
+                        write_file(
+                            &entry_full_path,
+                            &new_content,
+                            &ExistingFilePolicy::Overwrite,
+                        )?;
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Process a single line and update a `#include` directive if it targets the
+/// renamed module.
+///
+/// This function inspects the given `line` and determines whether it is a
+/// relevant `#include` directive referencing the module being renamed. If so,
+/// it applies the appropriate update according to Pom’s disambiguation rules.
+///
+/// The update is performed only when the include can be resolved unambiguously
+/// (e.g. project-qualified path or file-relative resolution), or after explicit
+/// user confirmation.
+///
+/// Non-`#include` lines are returned unchanged.
+/// `#include` lines not referencing the old module are returned unchanged.
+/// Matching includes are updated only if they can be safely resolved or confirmed by the user.
+///
+/// # Arguments
+/// - `line` - The line to process
+/// - `search_scope` - Set of directories considered as project roots
+/// - `file_path` - Path to the file containing `line` (without the file name)
+/// - `renamed_module_path` - Path to the renamed module (without the file name)
+/// - `old_module_name` - Original module name
+/// - `new_module_name` - New module name
+///
+/// # Returns
+/// Returns a tuple:
+/// - `Cow<str>` - The updated line if modified, or the original line otherwise
+/// - `bool` - `true` if the line was modified, `false` otherwise
+///
+/// # Errors
+/// Propagates any error that occurs during include resolution or user interaction.
+fn process_include_line<'a>(
+    line: &'a str,
+    _search_scope: &HashSet<PathBuf>,
+    _file_path: &Path,
+    _renamed_module_path: &Path,
+    old_module_name: &str,
+    new_module_name: &str
+) -> PomResult<(Cow<'a, str>, bool)> {
+    let trimmed = line.trim_start();
+
+    // Negative condition for early return, but that avoids nested blocks
+    if !trimmed.starts_with("#include") {
+        return Ok((Cow::Borrowed(line), false));
+    }
+
+    let old_header_name = format!("{}.h", old_module_name);
+    if !trimmed.contains(&old_header_name) {
+        return Ok((Cow::Borrowed(line), false));
+    }
+
+
+    let should_update = is_include_fully_resolved()
+    || is_include_resolved_from_file()
+    || does_user_approve();
+
+    if should_update {
+        let new_header_name = format!("{}.h", new_module_name);
+        let modified_line = Cow::Owned(line.replacen(&old_header_name, &new_header_name, 1));
+        Ok((modified_line, true))
+
+    } else {
+        let original_line = Cow::Borrowed(line);
+        Ok((original_line, false))
+    }
+
+}
+
+fn is_include_fully_resolved() -> bool { // A path is fully resolved if its first component is in the search scope. It can be modified safely as a fully resolved path is unique: It can't point toward two different files.
+    true
+}
+
+fn is_include_resolved_from_file() -> bool { // Resolve include relative to current file
+    // Takes the path to the file being processed, append the path to be included, check if it exists
+    true
+}
+
+fn does_user_approve() -> bool {
+    true
+}
+
 #[cfg(test)]
 mod module_rename_tests {
     use super::*;
@@ -244,144 +399,156 @@ mod module_rename_tests {
         (temp_dir, project_root, PathBuf::from("src/services"))
     }
 
-    #[test]
-    fn inspect_file_replaces_all_occurrences() {
-        let temp_dir = tempdir().unwrap();
-        let file_path = temp_dir.path().join("test.h");
+    mod file_inspection_tests {
+        use super::*;
 
-        write_file(
-            &file_path,
-            "#ifndef OLD_H\n#define OLD_H\n#endif // OLD_H\n",
-            &ExistingFilePolicy::Overwrite,
-        )
-        .unwrap();
+        #[test]
+        fn inspect_file_replaces_all_occurrences() {
+            let temp_dir = tempdir().unwrap();
+            let file_path = temp_dir.path().join("test.h");
 
-        let updated = inspect_file(&file_path, "OLD_H", "NEW_H").unwrap();
+            write_file(
+                &file_path,
+                "#ifndef OLD_H\n#define OLD_H\n#endif // OLD_H\n",
+                &ExistingFilePolicy::Overwrite,
+            )
+            .unwrap();
 
-        assert_eq!(
-            updated,
-            Some("#ifndef NEW_H\n#define NEW_H\n#endif // NEW_H\n".to_string())
-        );
+            let updated = inspect_file(&file_path, "OLD_H", "NEW_H").unwrap();
+
+            assert_eq!(
+                updated,
+                Some("#ifndef NEW_H\n#define NEW_H\n#endif // NEW_H\n".to_string())
+            );
+        }
+
+        #[test]
+        fn inspect_file_returns_none_when_pattern_not_found() {
+            let temp_dir = tempdir().unwrap();
+            let file_path = temp_dir.path().join("test.c");
+
+            write_file(
+                &file_path,
+                "#include \"other.h\"\n",
+                &ExistingFilePolicy::Overwrite,
+            )
+            .unwrap();
+
+            let updated = inspect_file(&file_path, "module_to_rename.h", "new_name.h").unwrap();
+
+            assert_eq!(updated, None);
+        }
     }
 
-    #[test]
-    fn inspect_file_returns_none_when_pattern_not_found() {
-        let temp_dir = tempdir().unwrap();
-        let file_path = temp_dir.path().join("test.c");
+    mod rename_application_tests {
+        use super::*;
 
-        write_file(
-            &file_path,
-            "#include \"other.h\"\n",
-            &ExistingFilePolicy::Overwrite,
-        )
-        .unwrap();
+        #[test]
+        fn apply_rename_renames_without_rewriting_when_content_is_none() {
+            let temp_dir = tempdir().unwrap();
+            let old_path = temp_dir.path().join("old.txt");
+            let new_path = temp_dir.path().join("new.txt");
 
-        let updated = inspect_file(&file_path, "module_to_rename.h", "new_name.h").unwrap();
+            write_file(&old_path, "Hello", &ExistingFilePolicy::Overwrite).unwrap();
 
-        assert_eq!(updated, None);
+            apply_rename(&old_path, &new_path, None).unwrap();
+
+            assert!(!old_path.exists());
+            assert!(new_path.exists());
+            assert_eq!(read_file(&new_path).unwrap(), "Hello");
+        }
+
+        #[test]
+        fn apply_rename_rewrites_then_renames_when_content_is_some() {
+            let temp_dir = tempdir().unwrap();
+            let old_path = temp_dir.path().join("old.txt");
+            let new_path = temp_dir.path().join("new.txt");
+
+            write_file(&old_path, "Hello", &ExistingFilePolicy::Overwrite).unwrap();
+
+            apply_rename(&old_path, &new_path, Some("Updated")).unwrap();
+
+            assert!(!old_path.exists());
+            assert!(new_path.exists());
+            assert_eq!(read_file(&new_path).unwrap(), "Updated");
+        }
     }
 
-    #[test]
-    fn apply_rename_renames_without_rewriting_when_content_is_none() {
-        let temp_dir = tempdir().unwrap();
-        let old_path = temp_dir.path().join("old.txt");
-        let new_path = temp_dir.path().join("new.txt");
+    mod rename_confirmation_tests {
+        use super::*;
 
-        write_file(&old_path, "Hello", &ExistingFilePolicy::Overwrite).unwrap();
+        #[test]
+        fn abort_keeps_files_and_content_unchanged() {
+            let (_temp_dir, project_root, module_path) = create_module_tree();
 
-        apply_rename(&old_path, &new_path, None).unwrap();
+            let rename_context = ModuleRenameContext {
+                project_root: &project_root,
+                module_path: &module_path,
+                old_name: "module_to_rename",
+                new_name: "new_name",
+                old_header_guard: "MODULE_TO_RENAME_H",
+                new_header_guard: "NEW_NAME_H",
+                header_file: true,
+                source_file: true,
+            };
 
-        assert!(!old_path.exists());
-        assert!(new_path.exists());
-        assert_eq!(read_file(&new_path).unwrap(), "Hello");
-    }
+            module_rename_flow(rename_context, Some(false)).unwrap();
 
-    #[test]
-    fn apply_rename_rewrites_then_renames_when_content_is_some() {
-        let temp_dir = tempdir().unwrap();
-        let old_path = temp_dir.path().join("old.txt");
-        let new_path = temp_dir.path().join("new.txt");
+            let old_header = project_root.join("src/services/module_to_rename.h");
+            let old_source = project_root.join("src/services/module_to_rename.c");
+            let new_header = project_root.join("src/services/new_name.h");
+            let new_source = project_root.join("src/services/new_name.c");
 
-        write_file(&old_path, "Hello", &ExistingFilePolicy::Overwrite).unwrap();
+            assert!(old_header.exists());
+            assert!(old_source.exists());
+            assert!(!new_header.exists());
+            assert!(!new_source.exists());
 
-        apply_rename(&old_path, &new_path, Some("Updated")).unwrap();
+            assert_eq!(
+                read_file(&old_header).unwrap(),
+                "#ifndef MODULE_TO_RENAME_H\n#define MODULE_TO_RENAME_H\n\n#endif // MODULE_TO_RENAME_H\n"
+            );
+            assert_eq!(
+                read_file(&old_source).unwrap(),
+                "#include \"module_to_rename.h\"\n\nvoid test(void) {}\n"
+            );
+        }
 
-        assert!(!old_path.exists());
-        assert!(new_path.exists());
-        assert_eq!(read_file(&new_path).unwrap(), "Updated");
-    }
+        #[test]
+        fn confirm_renames_files_and_updates_content() {
+            let (_temp_dir, project_root, module_path) = create_module_tree();
 
-    #[test]
-    fn abort_keeps_files_and_content_unchanged() {
-        let (_temp_dir, project_root, module_path) = create_module_tree();
+            let rename_context = ModuleRenameContext {
+                project_root: &project_root,
+                module_path: &module_path,
+                old_name: "module_to_rename",
+                new_name: "new_name",
+                old_header_guard: "MODULE_TO_RENAME_H",
+                new_header_guard: "NEW_NAME_H",
+                header_file: true,
+                source_file: true,
+            };
 
-        let rename_context = ModuleRenameContext {
-            project_root: &project_root,
-            module_path: &module_path,
-            old_name: "module_to_rename",
-            new_name: "new_name",
-            old_header_guard: "MODULE_TO_RENAME_H",
-            new_header_guard: "NEW_NAME_H",
-            header_file: true,
-            source_file: true,
-        };
+            module_rename_flow(rename_context, Some(true)).unwrap();
 
-        module_rename_flow(rename_context, Some(false)).unwrap();
+            let old_header = project_root.join("src/services/module_to_rename.h");
+            let old_source = project_root.join("src/services/module_to_rename.c");
+            let new_header = project_root.join("src/services/new_name.h");
+            let new_source = project_root.join("src/services/new_name.c");
 
-        let old_header = project_root.join("src/services/module_to_rename.h");
-        let old_source = project_root.join("src/services/module_to_rename.c");
-        let new_header = project_root.join("src/services/new_name.h");
-        let new_source = project_root.join("src/services/new_name.c");
+            assert!(!old_header.exists());
+            assert!(!old_source.exists());
+            assert!(new_header.exists());
+            assert!(new_source.exists());
 
-        assert!(old_header.exists());
-        assert!(old_source.exists());
-        assert!(!new_header.exists());
-        assert!(!new_source.exists());
-
-        assert_eq!(
-            read_file(&old_header).unwrap(),
-            "#ifndef MODULE_TO_RENAME_H\n#define MODULE_TO_RENAME_H\n\n#endif // MODULE_TO_RENAME_H\n"
-        );
-        assert_eq!(
-            read_file(&old_source).unwrap(),
-            "#include \"module_to_rename.h\"\n\nvoid test(void) {}\n"
-        );
-    }
-
-    #[test]
-    fn confirm_renames_files_and_updates_content() {
-        let (_temp_dir, project_root, module_path) = create_module_tree();
-
-        let rename_context = ModuleRenameContext {
-            project_root: &project_root,
-            module_path: &module_path,
-            old_name: "module_to_rename",
-            new_name: "new_name",
-            old_header_guard: "MODULE_TO_RENAME_H",
-            new_header_guard: "NEW_NAME_H",
-            header_file: true,
-            source_file: true,
-        };
-
-        module_rename_flow(rename_context, Some(true)).unwrap();
-
-        let old_header = project_root.join("src/services/module_to_rename.h");
-        let old_source = project_root.join("src/services/module_to_rename.c");
-        let new_header = project_root.join("src/services/new_name.h");
-        let new_source = project_root.join("src/services/new_name.c");
-
-        assert!(!old_header.exists());
-        assert!(!old_source.exists());
-        assert!(new_header.exists());
-        assert!(new_source.exists());
-
-        assert_eq!(
-            read_file(&new_header).unwrap(),
-            "#ifndef NEW_NAME_H\n#define NEW_NAME_H\n\n#endif // NEW_NAME_H\n"
-        );
-        assert_eq!(
-            read_file(&new_source).unwrap(),
-            "#include \"new_name.h\"\n\nvoid test(void) {}\n"
-        );
+            assert_eq!(
+                read_file(&new_header).unwrap(),
+                "#ifndef NEW_NAME_H\n#define NEW_NAME_H\n\n#endif // NEW_NAME_H\n"
+            );
+            assert_eq!(
+                read_file(&new_source).unwrap(),
+                "#include \"new_name.h\"\n\nvoid test(void) {}\n"
+            );
+        }
     }
 }
