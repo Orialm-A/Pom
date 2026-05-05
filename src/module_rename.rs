@@ -263,8 +263,8 @@ fn includes_update_flow(project_root: &Path, search_scope: &HashSet<PathBuf>, mo
                     let mut new_lines: Vec<Cow<'_, str>> = Vec::new();
                     let mut updates_count: u32 = 0;
 
-                    for line in file_content.lines() {
-                        let (new_line, line_modified) = process_include_line(line, search_scope, &entry_relative_path, module_path, old_module_name, new_module_name)?;
+                    for (line_index, line) in file_content.lines().enumerate() {
+                        let (new_line, line_modified) = process_include_line(line, &line_index, search_scope, &entry_relative_path, module_path, old_module_name, new_module_name)?;
                         new_lines.push(new_line);
                         if line_modified {updates_count += 1; }
                     }
@@ -317,15 +317,16 @@ fn includes_update_flow(project_root: &Path, search_scope: &HashSet<PathBuf>, mo
 /// Propagates any error that occurs during include resolution or user interaction.
 fn process_include_line<'a>(
     line: &'a str,
+    line_number: &usize,
     _search_scope: &HashSet<PathBuf>,
-    _file_path: &Path,
+    file_path: &Path,
     _renamed_module_path: &Path,
     old_module_name: &str,
     new_module_name: &str
 ) -> PomResult<(Cow<'a, str>, bool)> {
     let trimmed = line.trim_start();
 
-    // Negative condition for early return, but that avoids nested blocks
+    // Negative conditions for early return, but that avoids nested blocks
     if !trimmed.starts_with("#include") {
         return Ok((Cow::Borrowed(line), false));
     }
@@ -335,34 +336,69 @@ fn process_include_line<'a>(
         return Ok((Cow::Borrowed(line), false));
     }
 
+    let new_header_name = format!("{}.h", new_module_name);
+    let original_line = Cow::Borrowed(line);
+    let modified_line = Cow::Owned(line.replacen(&old_header_name, &new_header_name, 1));
 
     let should_update = is_include_fully_resolved()
     || is_include_resolved_from_file()
-    || does_user_approve();
+    || does_user_approve_include_update(file_path, *line_number, &original_line, &modified_line)?;
 
     if should_update {
-        let new_header_name = format!("{}.h", new_module_name);
-        let modified_line = Cow::Owned(line.replacen(&old_header_name, &new_header_name, 1));
         Ok((modified_line, true))
 
     } else {
-        let original_line = Cow::Borrowed(line);
         Ok((original_line, false))
     }
-
 }
 
 fn is_include_fully_resolved() -> bool { // A path is fully resolved if its first component is in the search scope. It can be modified safely as a fully resolved path is unique: It can't point toward two different files.
-    true
+    false
 }
 
 fn is_include_resolved_from_file() -> bool { // Resolve include relative to current file
     // Takes the path to the file being processed, append the path to be included, check if it exists
-    true
+    false
 }
 
-fn does_user_approve() -> bool {
-    true
+use owo_colors::OwoColorize;
+
+
+/// Ask the user whether an include line should be updated.
+///
+/// The prompt displays the file path, line number, original line, and proposed
+/// replacement using a diff-like `-` / `+` format.
+///
+/// Returns `true` if the user confirms the update, and `false` otherwise.
+///
+/// # Arguments
+///
+/// - `file_path` - Path to the file containing the include line
+/// - `line_number` - Line number of the include line
+/// - `old_line` - Current line content
+/// - `new_line` - Proposed line content
+///
+/// # Errors
+///
+/// Returns any error emitted while displaying the confirmation prompt.
+fn does_user_approve_include_update(
+    file_path: &Path,
+    line_number: usize,
+    old_line: &str,
+    new_line: &str
+) -> PomResult<bool> {
+    let old_diff_line = format!("- `{}`", old_line);
+    let new_diff_line = format!("+ `{}`", new_line);
+
+    let prompt = format!(
+        "In {}, update line {}:\r\n{}\r\n{}\r\n",
+        file_path.display(),
+        line_number,
+        &old_diff_line.bright_red(),
+        &new_diff_line.bright_green(),
+    );
+
+    confirm(&prompt)
 }
 
 #[cfg(test)]
