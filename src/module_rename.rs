@@ -11,6 +11,7 @@ use crate::filesystem::browsing::{EntryKind, validate_dir_entry};
 use crate::filesystem::io_ops::{ExistingFilePolicy, read_file, rename_file, write_file};
 use crate::project_toml::resolve_project_toml;
 use crate::prompt::confirm;
+use owo_colors::OwoColorize;
 use std::borrow::Cow;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -57,7 +58,13 @@ pub fn module_rename(
 
     module_rename_flow(rename_context, skip_confirmation)?;
 
-    includes_update_flow(&project_root, &sources_roots_set, &module_path, &old_module_name_normalized, &new_module_name_normalized)?;
+    includes_update_flow(
+        &project_root,
+        &sources_roots_set,
+        &module_path,
+        &old_module_name_normalized,
+        &new_module_name_normalized,
+    )?;
 
     Ok(())
 }
@@ -228,7 +235,13 @@ fn apply_rename(old_path: &Path, new_path: &Path, new_content: Option<&str>) -> 
 ///
 /// # Errors
 /// Propagates error from `read_file()` and `process_line()`
-fn includes_update_flow(project_root: &Path, search_scope: &HashSet<PathBuf>, module_path: &Path, old_module_name: &str, new_module_name: &str) -> PomResult<()> {
+fn includes_update_flow(
+    project_root: &Path,
+    search_scope: &HashSet<PathBuf>,
+    module_path: &Path,
+    old_module_name: &str,
+    new_module_name: &str,
+) -> PomResult<()> {
     for dir in search_scope {
         let search_path = project_root.join(dir);
         for entry in WalkDir::new(search_path).into_iter() {
@@ -264,9 +277,19 @@ fn includes_update_flow(project_root: &Path, search_scope: &HashSet<PathBuf>, mo
                     let mut updates_count: u32 = 0;
 
                     for (line_index, line) in file_content.lines().enumerate() {
-                        let (new_line, line_modified) = process_include_line(line, &line_index, search_scope, &entry_relative_path, module_path, old_module_name, new_module_name)?;
+                        let (new_line, line_modified) = process_include_line(
+                            line,
+                            &line_index,
+                            search_scope,
+                            &entry_relative_path,
+                            module_path,
+                            old_module_name,
+                            new_module_name,
+                        )?;
                         new_lines.push(new_line);
-                        if line_modified {updates_count += 1; }
+                        if line_modified {
+                            updates_count += 1;
+                        }
                     }
 
                     if updates_count > 0 {
@@ -319,80 +342,170 @@ fn process_include_line<'a>(
     line: &'a str,
     line_number: &usize,
     _search_scope: &HashSet<PathBuf>,
-    file_path: &Path,
-    _renamed_module_path: &Path,
+    current_file_path: &Path,
+    renamed_module_path: &Path,
     old_module_name: &str,
-    new_module_name: &str
+    new_module_name: &str,
 ) -> PomResult<(Cow<'a, str>, bool)> {
-    let trimmed = line.trim_start();
-
-    // Negative conditions for early return, but that avoids nested blocks
-    if !trimmed.starts_with("#include") {
-        return Ok((Cow::Borrowed(line), false));
-    }
-
     let old_header_name = format!("{}.h", old_module_name);
-    if !trimmed.contains(&old_header_name) {
-        return Ok((Cow::Borrowed(line), false));
-    }
+
+    let extracted_include_path = match extract_matching_include_path(line, &old_header_name) {
+        Some(include_path) => PathBuf::from(include_path),
+        None => {
+            return Ok((Cow::Borrowed(line), false));
+        }
+    };
 
     let new_header_name = format!("{}.h", new_module_name);
     let original_line = Cow::Borrowed(line);
     let modified_line = Cow::Owned(line.replacen(&old_header_name, &new_header_name, 1));
+    let old_header_file_path = renamed_module_path.join(&old_header_name);
 
     let should_update = is_include_fully_resolved()
-    || is_include_resolved_from_file()
-    || does_user_approve_include_update(file_path, *line_number, &original_line, &modified_line)?;
+        || is_include_resolved_from_file(
+            &old_header_file_path,
+            current_file_path,
+            &extracted_include_path,
+        )
+        || does_user_approve_include_update(
+            current_file_path,
+            *line_number,
+            &original_line,
+            &modified_line,
+        )?;
 
     if should_update {
         Ok((modified_line, true))
-
     } else {
         Ok((original_line, false))
     }
 }
 
-fn is_include_fully_resolved() -> bool { // A path is fully resolved if its first component is in the search scope. It can be modified safely as a fully resolved path is unique: It can't point toward two different files.
+/// Extract the include path from a `#include` line if it targets the given header.
+///
+/// This function parses a line of C source code and attempts to extract the path inside a `#include` directive (either `"..."` or `<...>`). It returns a slice of the original line corresponding to the include path.
+///
+/// The function only returns a value if:
+/// - the line starts with `#include` (after trimming leading whitespace)
+/// - the line contains `old_header_name`
+/// - the include path is correctly delimited with `"` or `< >`
+///
+/// # Arguments
+///
+/// - `line` - The full line of source code to inspect
+/// - `old_header_name` - Name of the header file being searched (e.g. `"timer.h"`)
+///
+/// # Returns
+///
+/// - `Some(&str)` containing the extracted include path (borrowed from `line`)
+/// - `None` if the line is not a matching `#include` or cannot be parsed
+///
+/// # Notes
+///
+/// - The returned `&str` is a slice of the input `line` and does not allocate
+/// - This function does not validate whether the extracted path exists on disk
+/// - Matching is based on a simple substring check and does not handle macros or complex preprocessor constructs
+fn extract_matching_include_path<'a>(line: &'a str, old_header_name: &str) -> Option<&'a str> {
+    let trimmed = line.trim_start();
+
+    if !trimmed.starts_with("#include") {
+        return None;
+    }
+
+    if !trimmed.contains(old_header_name) {
+        return None;
+    }
+
+    let rest = trimmed.trim_start_matches("#include").trim();
+
+    if let Some(include_path) = rest.strip_prefix('"') {
+        include_path.find('"').map(|end| &rest[1..1 + end])
+    } else if let Some(include_path) = rest.strip_prefix('<') {
+        include_path.find('>').map(|end| &rest[1..1 + end])
+    } else {
+        None
+    }
+}
+
+fn is_include_fully_resolved() -> bool {
+    // A path is fully resolved if its first component is in the search scope. It can be modified safely as a fully resolved path is unique: It can't point toward two different files.
     false
 }
 
-fn is_include_resolved_from_file() -> bool { // Resolve include relative to current file
-    // Takes the path to the file being processed, append the path to be included, check if it exists
-    false
+/// Determine whether an include path resolves to the renamed header when interpreted relative to the including file's directory.
+///
+/// This function simulates the first step of the compiler's include resolution:
+/// resolving a quoted include relative to the directory of the file that contains it.
+///
+/// It constructs a candidate path by joining the directory of the current file with the extracted include path, and compares it to the known path of the renamed header.
+///
+/// # Arguments
+/// - `old_header_file_path` - Full path to the original header file before rename
+/// - `current_file_path` - Full path to the file containing the include
+/// - `extracted_include_path` - Include path extracted from the `#include` line
+///
+/// # Returns
+/// - `true` if the include resolves exactly to the renamed header
+/// - `false` otherwise
+///
+/// # Notes
+/// - This comparison is purely path-based and does not access the filesystem
+/// - The file name is removed from `current_file_path` to obtain its directory
+/// - Paths are compared as-is; no normalization (e.g. `.` / `..`) is performed
+///
+/// # Debug
+/// This function currently prints the compared paths for debugging purposes.
+/// This should be removed or gated behind a debug flag in production.
+fn is_include_resolved_from_file(
+    old_header_file_path: &Path,
+    current_file_path: &Path,
+    extracted_include_path: &Path,
+) -> bool {
+    let mut current_file_path_components = current_file_path.components();
+    _ = current_file_path_components.next_back();
+    let current_file_dir_path = current_file_path_components.as_path();
+    let resolved_header_file_path = current_file_dir_path.join(extracted_include_path);
+
+    println!(
+        "The function `is_include_resolved_from_file()`is comparing these two paths:\r\n - `{}`\r\n - `{}` ( = {} + {})",
+        old_header_file_path.display(),
+        &resolved_header_file_path.display(),
+        current_file_dir_path.display(),
+        extracted_include_path.display()
+    );
+
+    old_header_file_path == resolved_header_file_path
 }
-
-use owo_colors::OwoColorize;
-
 
 /// Ask the user whether an include line should be updated.
 ///
 /// The prompt displays the file path, line number, original line, and proposed
 /// replacement using a diff-like `-` / `+` format.
 ///
-/// Returns `true` if the user confirms the update, and `false` otherwise.
+/// # Returns
+/// - `true` if the user confirms the update
+/// - `false` otherwise
 ///
 /// # Arguments
-///
-/// - `file_path` - Path to the file containing the include line
+/// - `current_file_path` - Path to the file containing the include line
 /// - `line_number` - Line number of the include line
 /// - `old_line` - Current line content
 /// - `new_line` - Proposed line content
 ///
 /// # Errors
-///
-/// Returns any error emitted while displaying the confirmation prompt.
+/// Propagates any error emitted while displaying the confirmation prompt.
 fn does_user_approve_include_update(
-    file_path: &Path,
+    current_file_path: &Path,
     line_number: usize,
     old_line: &str,
-    new_line: &str
+    new_line: &str,
 ) -> PomResult<bool> {
     let old_diff_line = format!("- `{}`", old_line);
     let new_diff_line = format!("+ `{}`", new_line);
 
     let prompt = format!(
         "In {}, update line {}:\r\n{}\r\n{}\r\n",
-        file_path.display(),
+        current_file_path.display(),
         line_number,
         &old_diff_line.bright_red(),
         &new_diff_line.bright_green(),
@@ -434,6 +547,54 @@ mod module_rename_tests {
 
         (temp_dir, project_root, PathBuf::from("src/services"))
     }
+
+    // fn create_test_file_tree() -> (tempfile::TempDir, PathBuf) {
+    //     let temp_dir = tempdir().unwrap();
+    //     let project_root = temp_dir.path().join("project_root");
+    //
+    //     // let directories_collection: Vec<PathBuf> = Vec::from([
+    //     let directories_collection = [
+    //         project_root.join("src/services"),
+    //         project_root.join("src/peripherals"),
+    //         project_root.join("unit_tests"),
+    //     ];
+    //     create_directories(&directories_collection).unwrap();
+    //
+    //     let files_collection = [
+    //         project_root.join("src/services/timer.h"),
+    //         project_root.join("src/services/timer.c"),
+    //         project_root.join("src/peripherals/tim.h"),
+    //         project_root.join("src/peripherals/timer.c"),
+    //         project_root.join("unit_tests/timer.h"),
+    //         project_root.join("unit_tests/tests_timer.c"),
+    //     ];
+    //
+    //
+    //
+    //
+    //     write_file(
+    //         &files_collection[0],
+    //         "#ifndef S_TIMER_H\n#define S_TIMER_H\n\n#endif // S_TIMER_H",
+    //         &ExistingFilePolicy::Overwrite,
+    //     ).unwrap();
+    //
+    //
+    //     write_file(
+    //         &files_collection[2],
+    //         "#ifndef TIM_H\n#define TIM_H\n\n#endif // TIM_H",
+    //         &ExistingFilePolicy::Overwrite,
+    //     ).unwrap();
+    //
+    //
+    //     write_file(
+    //         &files_collection[4],
+    //         "#ifndef T_TIMER_H\n#define T_TIMER_H\n\n#endif // T_TIMER_H",
+    //         &ExistingFilePolicy::Overwrite,
+    //     ).unwrap();
+    //
+    //
+    //     (temp_dir, project_root)
+    // }
 
     mod file_inspection_tests {
         use super::*;
@@ -585,6 +746,85 @@ mod module_rename_tests {
                 read_file(&new_source).unwrap(),
                 "#include \"new_name.h\"\n\nvoid test(void) {}\n"
             );
+        }
+    }
+
+    mod include_lines_parsing_tests {
+        use super::*;
+
+        #[test]
+        fn ignores_non_include_lines() {
+            let line = "void test(void) {}";
+            let old_module_name = "some_name";
+            let result = extract_matching_include_path(&line, &old_module_name);
+            assert_eq!(result, None);
+        }
+
+        #[test]
+        fn ignores_includes_not_containing_module_old_name() {
+            let line = "#include \"path/to/a/module.h\"";
+            let old_module_name = "some_name";
+            let result = extract_matching_include_path(&line, &old_module_name);
+            assert_eq!(result, None);
+        }
+
+        #[test]
+        fn returns_extracted_include_path() {
+            let line = "#include \"path/to/some_name.h\"";
+            let old_header_name = "some_name.h";
+            let result = extract_matching_include_path(line, old_header_name);
+            assert_eq!(result, Some("path/to/some_name.h"));
+
+            let line = "#include <path/to/some_name.h>";
+            let old_header_name = "some_name.h";
+            let result = extract_matching_include_path(line, old_header_name);
+            assert_eq!(result, Some("path/to/some_name.h"));
+        }
+    }
+
+    mod include_resolution_from_file_dir_tests {
+        use super::*;
+
+        #[test]
+        fn resolves_include_relative_to_current_file_dir() {
+            let old_header_file_path = PathBuf::from("path/to/a_module/with/old_name.h");
+            let current_file = PathBuf::from("path/to/source.c");
+            let extracted_include_path = PathBuf::from("a_module/with/old_name.h");
+
+            let result = is_include_resolved_from_file(
+                &old_header_file_path,
+                &current_file,
+                &extracted_include_path,
+            );
+            assert_eq!(result, true);
+        }
+
+        #[test]
+        fn rejects_header_with_same_name_in_another_location() {
+            let old_header_file_path = PathBuf::from("path/to/a_module/with/old_name.h");
+            let current_file = PathBuf::from("path/to/source.c");
+            let extracted_include_path = PathBuf::from("another_module/with/old_name.h");
+
+            let result = is_include_resolved_from_file(
+                &old_header_file_path,
+                &current_file,
+                &extracted_include_path,
+            );
+            assert_eq!(result, false);
+        }
+
+        #[test]
+        fn rejects_project_relative_include_when_resolving_from_current_file_dir() {
+            let old_header_file_path = PathBuf::from("path/to/a_module/with/old_name.h");
+            let current_file = PathBuf::from("path/to/source.c");
+            let extracted_include_path = PathBuf::from("to/a_module/with/old_name.h");
+
+            let result = is_include_resolved_from_file(
+                &old_header_file_path,
+                &current_file,
+                &extracted_include_path,
+            );
+            assert_eq!(result, false);
         }
     }
 }
