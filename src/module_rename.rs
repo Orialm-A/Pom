@@ -14,7 +14,7 @@ use crate::prompt::confirm;
 use owo_colors::OwoColorize;
 use std::borrow::Cow;
 use std::collections::HashSet;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use walkdir::WalkDir;
 
 /// Use this struct to pass all the parameters to the rename flow, after the interactive functions, to make it testable
@@ -341,7 +341,7 @@ fn includes_update_flow(
 fn process_include_line<'a>(
     line: &'a str,
     line_number: &usize,
-    _search_scope: &HashSet<PathBuf>,
+    search_scope: &HashSet<PathBuf>,
     current_file_path: &Path,
     renamed_module_path: &Path,
     old_module_name: &str,
@@ -361,7 +361,7 @@ fn process_include_line<'a>(
     let modified_line = Cow::Owned(line.replacen(&old_header_name, &new_header_name, 1));
     let old_header_file_path = renamed_module_path.join(&old_header_name);
 
-    let should_update = is_include_fully_resolved()
+    let should_update = is_include_fully_resolved(&extracted_include_path, search_scope)
         || is_include_resolved_from_file(
             &old_header_file_path,
             current_file_path,
@@ -427,9 +427,40 @@ fn extract_matching_include_path<'a>(line: &'a str, old_header_name: &str) -> Op
     }
 }
 
-fn is_include_fully_resolved() -> bool {
-    // A path is fully resolved if its first component is in the search scope. It can be modified safely as a fully resolved path is unique: It can't point toward two different files.
-    false
+/// Determine whether an include path is project-qualified (fully resolved)
+/// according to Pom's search scope.
+///
+/// An include path is considered "fully resolved" if its first path component
+/// matches one of the directories in `search_scope`. This means the include
+/// explicitly starts from a known project root (e.g. `src/...` or `unit_tests/...`)
+/// rather than being relative to the including file.
+///
+/// Only the first path component is considered
+/// Relative paths such as `./...` or `../...` are rejected
+/// Absolute paths are rejected
+/// Empty paths are rejected
+///
+/// # Arguments
+/// - `extracted_include_path` - Path extracted from a `#include` directive
+/// - `search_scope` - Set of project root directories (e.g. `src`, `unit_tests`)
+///
+/// # Returns
+/// - `true` if the include path starts with a directory present in `search_scope`
+/// - `false` otherwise
+///
+/// # Notes
+/// - This function does not access the filesystem; it performs a purely
+///   syntactic check
+/// - This is a Pom-specific definition of "fully resolved" and does not
+///   reflect the full behavior of a C compiler's include resolution
+fn is_include_fully_resolved(
+    extracted_include_path: &Path,
+    search_scope: &HashSet<PathBuf>,
+) -> bool {
+    match extracted_include_path.components().next() {
+        Some(Component::Normal(part)) => search_scope.contains(Path::new(part)),
+        _ => false,
+    }
 }
 
 /// Determine whether an include path resolves to the renamed header when interpreted relative to the including file's directory.
@@ -437,7 +468,8 @@ fn is_include_fully_resolved() -> bool {
 /// This function simulates the first step of the compiler's include resolution:
 /// resolving a quoted include relative to the directory of the file that contains it.
 ///
-/// It constructs a candidate path by joining the directory of the current file with the extracted include path, and compares it to the known path of the renamed header.
+/// It constructs a candidate path by joining the directory of the current file with the extracted include path, and compares it
+/// to the known path of the renamed header.
 ///
 /// # Arguments
 /// - `old_header_file_path` - Full path to the original header file before rename
@@ -547,54 +579,6 @@ mod module_rename_tests {
 
         (temp_dir, project_root, PathBuf::from("src/services"))
     }
-
-    // fn create_test_file_tree() -> (tempfile::TempDir, PathBuf) {
-    //     let temp_dir = tempdir().unwrap();
-    //     let project_root = temp_dir.path().join("project_root");
-    //
-    //     // let directories_collection: Vec<PathBuf> = Vec::from([
-    //     let directories_collection = [
-    //         project_root.join("src/services"),
-    //         project_root.join("src/peripherals"),
-    //         project_root.join("unit_tests"),
-    //     ];
-    //     create_directories(&directories_collection).unwrap();
-    //
-    //     let files_collection = [
-    //         project_root.join("src/services/timer.h"),
-    //         project_root.join("src/services/timer.c"),
-    //         project_root.join("src/peripherals/tim.h"),
-    //         project_root.join("src/peripherals/timer.c"),
-    //         project_root.join("unit_tests/timer.h"),
-    //         project_root.join("unit_tests/tests_timer.c"),
-    //     ];
-    //
-    //
-    //
-    //
-    //     write_file(
-    //         &files_collection[0],
-    //         "#ifndef S_TIMER_H\n#define S_TIMER_H\n\n#endif // S_TIMER_H",
-    //         &ExistingFilePolicy::Overwrite,
-    //     ).unwrap();
-    //
-    //
-    //     write_file(
-    //         &files_collection[2],
-    //         "#ifndef TIM_H\n#define TIM_H\n\n#endif // TIM_H",
-    //         &ExistingFilePolicy::Overwrite,
-    //     ).unwrap();
-    //
-    //
-    //     write_file(
-    //         &files_collection[4],
-    //         "#ifndef T_TIMER_H\n#define T_TIMER_H\n\n#endif // T_TIMER_H",
-    //         &ExistingFilePolicy::Overwrite,
-    //     ).unwrap();
-    //
-    //
-    //     (temp_dir, project_root)
-    // }
 
     mod file_inspection_tests {
         use super::*;
@@ -779,6 +763,82 @@ mod module_rename_tests {
             let old_header_name = "some_name.h";
             let result = extract_matching_include_path(line, old_header_name);
             assert_eq!(result, Some("path/to/some_name.h"));
+        }
+    }
+
+    mod fully_resolved_include_path_tests {
+        use super::*;
+
+        #[test]
+        fn accepts_include_path_starting_in_search_scope() {
+            let mut search_scope: HashSet<PathBuf> = HashSet::new();
+            search_scope.insert(PathBuf::from("src"));
+            search_scope.insert(PathBuf::from("unit_tests"));
+
+            let extracted_include_path =
+                PathBuf::from("src/path/fully/resolved/from/project/sources/to/header.h");
+            assert!(is_include_fully_resolved(
+                &extracted_include_path,
+                &search_scope
+            ));
+        }
+
+        #[test]
+        fn rejects_include_path_not_starting_in_search_scope() {
+            let mut search_scope: HashSet<PathBuf> = HashSet::new();
+            search_scope.insert(PathBuf::from("src"));
+            search_scope.insert(PathBuf::from("unit_tests"));
+
+            let extracted_include_path = PathBuf::from("path/not/fully/resolved/to/header.h");
+            assert_eq!(
+                is_include_fully_resolved(&extracted_include_path, &search_scope),
+                false
+            );
+        }
+
+        #[test]
+        fn rejects_relative_include_paths() {
+            let mut search_scope: HashSet<PathBuf> = HashSet::new();
+            search_scope.insert(PathBuf::from("src"));
+            search_scope.insert(PathBuf::from("unit_tests"));
+
+            let extracted_include_path = PathBuf::from("./path/not/fully/resolved/to/header.h");
+            assert_eq!(
+                is_include_fully_resolved(&extracted_include_path, &search_scope),
+                false
+            );
+
+            let extracted_include_path = PathBuf::from("../path/not/fully/resolved/to/header.h");
+            assert_eq!(
+                is_include_fully_resolved(&extracted_include_path, &search_scope),
+                false
+            );
+        }
+
+        #[test]
+        fn rejects_empty_paths() {
+            let mut search_scope: HashSet<PathBuf> = HashSet::new();
+            search_scope.insert(PathBuf::from("src"));
+            search_scope.insert(PathBuf::from("unit_tests"));
+
+            let extracted_include_path = PathBuf::from("");
+            assert_eq!(
+                is_include_fully_resolved(&extracted_include_path, &search_scope),
+                false
+            );
+        }
+
+        #[test]
+        fn rejects_absolute_path() {
+            let mut search_scope: HashSet<PathBuf> = HashSet::new();
+            search_scope.insert(PathBuf::from("src"));
+            search_scope.insert(PathBuf::from("unit_tests"));
+
+            let extracted_include_path = PathBuf::from("/src/header.h");
+            assert_eq!(
+                is_include_fully_resolved(&extracted_include_path, &search_scope),
+                false
+            );
         }
     }
 
