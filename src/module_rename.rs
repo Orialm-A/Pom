@@ -29,6 +29,18 @@ struct ModuleRenameContext<'a> {
     source_file: bool,
 }
 
+/// Result of a module rename operation
+///
+/// This enum indicates whether the rename process has been applied or aborted
+/// by the user.
+/// It is used to determine whether follow-up actions, such as include updates,
+/// should be executed.
+#[derive(PartialEq)]
+enum RenameOutcome {
+    Applied,
+    Aborted,
+}
+
 /// CLI `module rename` entry point
 pub fn module_rename(
     old_module_name: Option<String>,
@@ -56,21 +68,26 @@ pub fn module_rename(
         source_file: module_files.source_file,
     };
 
-    module_rename_flow(rename_context, skip_confirmation)?;
+    let rename_outcome = module_rename_flow(rename_context, skip_confirmation)?;
 
-    includes_update_flow(
-        &project_root,
-        &sources_roots_set,
-        &module_path,
-        &old_module_name_normalized,
-        &new_module_name_normalized,
-    )?;
+    if rename_outcome == RenameOutcome::Applied {
+        includes_update_flow(
+            &project_root,
+            &sources_roots_set,
+            &module_path,
+            &old_module_name_normalized,
+            &new_module_name_normalized,
+        )?;
+    }
 
     Ok(())
 }
 
 /// Rename logic, isolated to make it testable without prompts
-fn module_rename_flow(ctx: ModuleRenameContext, auto_confirm: Option<bool>) -> PomResult<()> {
+fn module_rename_flow(
+    ctx: ModuleRenameContext,
+    auto_confirm: Option<bool>,
+) -> PomResult<RenameOutcome> {
     println!(
         "Trying to rename module `{}` into `{}` in `{}`...",
         ctx.old_name,
@@ -124,11 +141,12 @@ fn module_rename_flow(ctx: ModuleRenameContext, auto_confirm: Option<bool>) -> P
                 source_content.as_deref(),
             )?;
         }
+
+        Ok(RenameOutcome::Applied)
     } else {
         println!("Rename aborted - No file had been modified.");
+        Ok(RenameOutcome::Aborted)
     }
-
-    Ok(())
 }
 
 /// Inspect a header file and prepare a header guard update.
@@ -391,17 +409,14 @@ fn process_include_line<'a>(
 /// - the include path is correctly delimited with `"` or `< >`
 ///
 /// # Arguments
-///
 /// - `line` - The full line of source code to inspect
 /// - `old_header_name` - Name of the header file being searched (e.g. `"timer.h"`)
 ///
 /// # Returns
-///
 /// - `Some(&str)` containing the extracted include path (borrowed from `line`)
 /// - `None` if the line is not a matching `#include` or cannot be parsed
 ///
 /// # Notes
-///
 /// - The returned `&str` is a slice of the input `line` and does not allocate
 /// - This function does not validate whether the extracted path exists on disk
 /// - Matching is based on a simple substring check and does not handle macros or complex preprocessor constructs
@@ -435,10 +450,10 @@ fn extract_matching_include_path<'a>(line: &'a str, old_header_name: &str) -> Op
 /// explicitly starts from a known project root (e.g. `src/...` or `unit_tests/...`)
 /// rather than being relative to the including file.
 ///
-/// Only the first path component is considered
-/// Relative paths such as `./...` or `../...` are rejected
-/// Absolute paths are rejected
-/// Empty paths are rejected
+/// Only the first path component is considered.
+/// Relative paths such as `./...` or `../...` are rejected.
+/// Absolute paths are rejected.
+/// Empty paths are rejected.
 ///
 /// # Arguments
 /// - `extracted_include_path` - Path extracted from a `#include` directive
