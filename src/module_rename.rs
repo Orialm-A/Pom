@@ -23,10 +23,12 @@ struct ModuleRenameContext<'a> {
     module_path: &'a Path,
     old_name: &'a str,
     new_name: &'a str,
+    old_name_was_unique: bool,
     old_header_guard: &'a str,
     new_header_guard: &'a str,
     header_file: bool,
     source_file: bool,
+    search_scope: &'a HashSet<PathBuf>,
 }
 
 /// Result of a module rename operation
@@ -49,12 +51,12 @@ pub fn module_rename(
 ) -> PomResult<()> {
     let project_root = resolve_project_root(None)?;
     let project_toml = resolve_project_toml(&project_root)?;
-    let sources_roots_set = project_toml.get_modules_roots()?;
+    let search_scope = project_toml.get_modules_roots()?;
 
-    let (module_path, old_module_name_normalized, old_header_guard, module_files) =
-        resolve_old_module_name(old_module_name, &project_root, &sources_roots_set)?;
+    let (module_path, old_module_name_normalized, old_header_guard, module_files, module_is_unique) =
+        resolve_old_module_name(old_module_name, &project_root, &search_scope)?;
     let (new_module_name_normalized, new_header_guard) =
-        resolve_new_module_name(new_module_name, &None, &project_root, &sources_roots_set)?;
+        resolve_new_module_name(new_module_name, &None, &project_root, &search_scope)?;
     let skip_confirmation = if skip_confirmation { Some(true) } else { None };
 
     let rename_context = ModuleRenameContext {
@@ -62,22 +64,18 @@ pub fn module_rename(
         module_path: &module_path,
         old_name: &old_module_name_normalized,
         new_name: &new_module_name_normalized,
+        old_name_was_unique: module_is_unique,
         old_header_guard: &old_header_guard,
         new_header_guard: &new_header_guard,
         header_file: module_files.header_file,
         source_file: module_files.source_file,
+        search_scope: &search_scope,
     };
 
-    let rename_outcome = module_rename_flow(rename_context, skip_confirmation)?;
+    let rename_outcome = module_rename_flow(&rename_context, skip_confirmation)?;
 
     if rename_outcome == RenameOutcome::Applied {
-        includes_update_flow(
-            &project_root,
-            &sources_roots_set,
-            &module_path,
-            &old_module_name_normalized,
-            &new_module_name_normalized,
-        )?;
+        includes_update_flow(&rename_context)?;
     }
 
     Ok(())
@@ -85,7 +83,7 @@ pub fn module_rename(
 
 /// Rename logic, isolated to make it testable without prompts
 fn module_rename_flow(
-    ctx: ModuleRenameContext,
+    ctx: &ModuleRenameContext,
     auto_confirm: Option<bool>,
 ) -> PomResult<RenameOutcome> {
     println!(
@@ -246,24 +244,15 @@ fn apply_rename(old_path: &Path, new_path: &Path, new_content: Option<&str>) -> 
 /// Iterate over the files after a rename. Within a file, iterate over lines to find includes. These includes are processed by the function `process_line()`.
 ///
 /// # Arguments
-/// - `project_root` - Path to the project root
-/// - `search_scope` - Directories to explore recursively
-/// - `old_include_path` - Path to the renamed header with its old name
-/// - `new_include_path` - Path to the renamed header with its new name
+/// - `ctx` - Struct containing all the parameters for the rename
 ///
 /// # Errors
 /// Propagates error from `read_file()` and `process_line()`
-fn includes_update_flow(
-    project_root: &Path,
-    search_scope: &HashSet<PathBuf>,
-    module_path: &Path,
-    old_module_name: &str,
-    new_module_name: &str,
-) -> PomResult<()> {
-    for dir in search_scope {
-        let search_path = project_root.join(dir);
+fn includes_update_flow(ctx: &ModuleRenameContext) -> PomResult<()> {
+    for dir in ctx.search_scope {
+        let search_path = ctx.project_root.join(dir);
         for entry in WalkDir::new(search_path).into_iter() {
-            let validated_entry = validate_dir_entry(entry, project_root)?;
+            let validated_entry = validate_dir_entry(entry, ctx.project_root)?;
 
             let entry_relative_path = validated_entry.relative_path;
             let entry_full_path = validated_entry.full_path;
@@ -295,15 +284,8 @@ fn includes_update_flow(
                     let mut updates_count: u32 = 0;
 
                     for (line_index, line) in file_content.lines().enumerate() {
-                        let (new_line, line_modified) = process_include_line(
-                            line,
-                            &line_index,
-                            search_scope,
-                            &entry_relative_path,
-                            module_path,
-                            old_module_name,
-                            new_module_name,
-                        )?;
+                        let (new_line, line_modified) =
+                            process_include_line(line, &line_index, &entry_relative_path, ctx)?;
                         new_lines.push(new_line);
                         if line_modified {
                             updates_count += 1;
@@ -343,11 +325,9 @@ fn includes_update_flow(
 ///
 /// # Arguments
 /// - `line` - The line to process
-/// - `search_scope` - Set of directories considered as project roots
-/// - `file_path` - Path to the file containing `line` (without the file name)
-/// - `renamed_module_path` - Path to the renamed module (without the file name)
-/// - `old_module_name` - Original module name
-/// - `new_module_name` - New module name
+/// - `line_number` - Index of the line in the file
+/// - `current_file_path` - Path to the file containing `line` (without the file name)
+/// - `ctx` - Struct containing all the parameters for the rename
 ///
 /// # Returns
 /// Returns a tuple:
@@ -359,13 +339,10 @@ fn includes_update_flow(
 fn process_include_line<'a>(
     line: &'a str,
     line_number: &usize,
-    search_scope: &HashSet<PathBuf>,
     current_file_path: &Path,
-    renamed_module_path: &Path,
-    old_module_name: &str,
-    new_module_name: &str,
+    ctx: &ModuleRenameContext,
 ) -> PomResult<(Cow<'a, str>, bool)> {
-    let old_header_name = format!("{}.h", old_module_name);
+    let old_header_name = format!("{}.h", ctx.old_name);
 
     let extracted_include_path = match extract_matching_include_path(line, &old_header_name) {
         Some(include_path) => PathBuf::from(include_path),
@@ -374,12 +351,13 @@ fn process_include_line<'a>(
         }
     };
 
-    let new_header_name = format!("{}.h", new_module_name);
+    let new_header_name = format!("{}.h", ctx.new_name);
     let original_line = Cow::Borrowed(line);
     let modified_line = Cow::Owned(line.replacen(&old_header_name, &new_header_name, 1));
-    let old_header_file_path = renamed_module_path.join(&old_header_name);
+    let old_header_file_path = ctx.module_path.join(&old_header_name);
 
-    let should_update = is_include_fully_resolved(&extracted_include_path, search_scope)
+    let should_update = ctx.old_name_was_unique
+        || is_include_fully_resolved(&extracted_include_path, ctx.search_scope)
         || is_include_resolved_from_file(
             &old_header_file_path,
             current_file_path,
@@ -568,10 +546,13 @@ mod module_rename_tests {
     use std::path::PathBuf;
     use tempfile::{TempDir, tempdir};
 
-    fn create_module_tree() -> (TempDir, PathBuf, PathBuf) {
+    fn create_module_tree() -> (TempDir, PathBuf, PathBuf, HashSet<PathBuf>) {
         let temp_dir = tempdir().unwrap();
         let project_root = temp_dir.path().join("project");
         let module_dir = project_root.join("src/services");
+        let mut search_scope: HashSet<PathBuf> = HashSet::new();
+
+        search_scope.insert(PathBuf::from("src"));
 
         fs::create_dir_all(&module_dir).unwrap();
 
@@ -592,7 +573,12 @@ mod module_rename_tests {
         )
         .unwrap();
 
-        (temp_dir, project_root, PathBuf::from("src/services"))
+        (
+            temp_dir,
+            project_root,
+            PathBuf::from("src/services"),
+            search_scope,
+        )
     }
 
     mod file_inspection_tests {
@@ -675,20 +661,22 @@ mod module_rename_tests {
 
         #[test]
         fn abort_keeps_files_and_content_unchanged() {
-            let (_temp_dir, project_root, module_path) = create_module_tree();
+            let (_temp_dir, project_root, module_path, search_scope) = create_module_tree();
 
             let rename_context = ModuleRenameContext {
                 project_root: &project_root,
                 module_path: &module_path,
                 old_name: "module_to_rename",
                 new_name: "new_name",
+                old_name_was_unique: true,
                 old_header_guard: "MODULE_TO_RENAME_H",
                 new_header_guard: "NEW_NAME_H",
                 header_file: true,
                 source_file: true,
+                search_scope: &search_scope,
             };
 
-            module_rename_flow(rename_context, Some(false)).unwrap();
+            module_rename_flow(&rename_context, Some(false)).unwrap();
 
             let old_header = project_root.join("src/services/module_to_rename.h");
             let old_source = project_root.join("src/services/module_to_rename.c");
@@ -712,20 +700,22 @@ mod module_rename_tests {
 
         #[test]
         fn confirm_renames_files_and_updates_content() {
-            let (_temp_dir, project_root, module_path) = create_module_tree();
+            let (_temp_dir, project_root, module_path, search_scope) = create_module_tree();
 
             let rename_context = ModuleRenameContext {
                 project_root: &project_root,
                 module_path: &module_path,
                 old_name: "module_to_rename",
                 new_name: "new_name",
+                old_name_was_unique: true,
                 old_header_guard: "MODULE_TO_RENAME_H",
                 new_header_guard: "NEW_NAME_H",
                 header_file: true,
                 source_file: true,
+                search_scope: &search_scope,
             };
 
-            module_rename_flow(rename_context, Some(true)).unwrap();
+            module_rename_flow(&rename_context, Some(true)).unwrap();
 
             let old_header = project_root.join("src/services/module_to_rename.h");
             let old_source = project_root.join("src/services/module_to_rename.c");
