@@ -113,6 +113,7 @@ pub fn resolve_new_module_name(
 /// - the slugified module name
 /// - the module name in `CONSTANT_CASE`
 /// - `*.h` / `*.c` file presence information for the selected module
+/// - `true` if a unique module has been found, `false` otherwise
 ///
 /// # Errors
 /// - `PomErrorCode::ModuleRenameNotFound` if no module is found
@@ -120,7 +121,7 @@ pub fn resolve_old_module_name(
     old_module_name_parameter: Option<String>,
     project_root: &Path,
     search_scope: &HashSet<PathBuf>,
-) -> PomResult<(PathBuf, String, String, ModuleFiles)> {
+) -> PomResult<(PathBuf, String, String, ModuleFiles, bool)> {
     let (_, old_name_normalized, old_header_guard) = resolve_name(
         old_module_name_parameter,
         "Module old name (without file extension)",
@@ -131,6 +132,7 @@ pub fn resolve_old_module_name(
     let number_of_modules = search_result.len();
 
     let module_location: PathBuf;
+    let module_is_unique: bool;
 
     if number_of_modules == 0 {
         return Err((
@@ -140,8 +142,10 @@ pub fn resolve_old_module_name(
     } else if number_of_modules > 1 {
         let available_modules: Vec<String> = search_result.get_all_locations_as_text();
         module_location = select_module(&available_modules)?;
+        module_is_unique = false;
     } else {
         module_location = search_result.get_unique_location()?;
+        module_is_unique = true;
     }
     let module_files = search_result.get_module_files(&module_location)?;
     Ok((
@@ -149,6 +153,7 @@ pub fn resolve_old_module_name(
         old_name_normalized,
         old_header_guard,
         module_files,
+        module_is_unique,
     ))
 }
 
@@ -598,9 +603,10 @@ mod tests {
         fn auto_select_when_module_is_unique() {
             let (_temp_dir, project_root, search_scope) = create_test_file_tree();
             let old_module_name = Some(String::from("tim")); // typing prompt ignored
-            let (module_location, _, _, _) =
+            let (module_location, _, _, _, module_is_unique) =
                 resolve_old_module_name(old_module_name, &project_root, &search_scope).unwrap(); // Selection prompt may fire
 
+            assert!(module_is_unique);
             assert_eq!(module_location, PathBuf::from("src/peripherals"));
         }
     }
