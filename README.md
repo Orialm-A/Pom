@@ -1,93 +1,48 @@
 # Pom
 
-![License](https://img.shields.io/badge/license-MIT-blue.svg) ![CI](https://github.com/Orialm-A/Pom/actions/workflows/ci.yml/badge.svg)
+![License](https://img.shields.io/badge/license-MIT-blue.svg) [![CI](https://github.com/Orialm-A/Pom/actions/workflows/ci.yml/badge.svg)](https://github.com/Orialm-A/Pom/blob/release/.github/workflows/ci.yml) ![Status](https://img.shields.io/badge/status-alpha-red)
 
-**Pom** is a small CLI tool to scaffold and organize embedded C projects.
+Pom is a small CLI tool to scaffold and organize embedded C projects.
 
-It focuses on **structure, layering and long-term maintainability** rather than flashy automation.
+It focuses on structure, consistency and long-term maintainability rather than flashy automation.
 
-> Yes, *Pom* also stands for *Polyoxymethylene*.
-> If you have −10 diopters in each eye, you might notice similarities:
-> both are used where precision, rigidity and low friction matter. 🙂
+> Like Polyoxymethylene, Pom is used where precision, rigidity and low friction matter.
 
-------
-
+---
 ## ⚠️ Project Status
-
 Pom is currently in **alpha**:
-
-- Only three commands are implemented:
-  - `pom project create` --> Create a project filesystem
-  - `pom module add` --> Add a C module to the project
-  - `pom module rename` --> Rename a C module
-- There is **no installation or distribution mechanism yet**
-- It is not intended for external usage at this stage
-- The content of the next release is not decided
+- Only a limited feature set is implemented
+- No installation or distribution mechanism exists yet
+- The project is not intended for external usage at this stage
 
 This repository mainly documents ongoing development.
 
-------
+---
+## Features
 
-## Current CLI Overview
+- [x] Create projects
+- [x] Add modules
+- [x] Rename modules
+- [ ] Generate CMake files
+- [ ] Provide target-independent `build` and `flash` commands
+- [ ] Generate RTOS-ready projects
+- [ ] Additional targets
+- [ ] Add / remove directories
+- [ ] User configuration
 
+---
+## How to use it
+### Installation
+*Pom cannot be installed yet. A clean Pom installation process is planned after RTOS selection is implemented. No date is planned yet.*
+
+### Current CLI Overview
 ```bash
-pom project create [NAME] [--path PATH] [--target TARGET] [--dry-run]
-pom module add [NAME] [--layer LAYER] [--brief TEXT] [--details TEXT] [--dry-run]
+pom project create [NAME] [--path PATH] [--target TARGET]
+pom module add [NAME] [--layer LAYER] [--brief TEXT] [--details TEXT]
 pom module rename [OLD_NAME] [NEW_NAME] [--yes]
 ```
 
 Other commands (`build`, `flash`, `monitor`, `clean`, etc.) exist in the CLI structure but are not implemented yet.
-
-------
-
-## Philosophy
-
-Pom is built around a few ideas:
-
-- Embedded-first workflow
-- Clear separation of layers
-- Deterministic project structure
-- Minimal magic
-
-It is primarily designed to replace personal Bash scripts used to bootstrap embedded projects.
-
-------
-
-## Supported Targets (Planned)
-
-- STM32 Nucleo F411RE
-- ESP32-C3-DevKit-C
-- Raspberry Pi Pico W
-
-Support is driven by available hardware and real usage.
-Devkits are currently considered as targets because generated files may differ between two boards using the same MCU. However, nothing in the implementation prevents defining MCUs directly as targets in the future.
-
-------
-
-## Development Approach
-
-Pom evolves incrementally through small MVPs:
-
-- Clean CLI
-- Target project generation
-- Module management
-- Target abstraction
-- Build command unification
-
-Features are implemented only after dogfooding. The goal is to validate real-world usefulness rather than add speculative functionality.
-Pom is also a Rust learning project, so development progresses incrementally.
-
-------
-
-## Why this exists
-
-Because:
-
-- Writing the same CMake boilerplate and directory structure for every embedded project gets old
-- Good structure at day 0 prevents pain at month 6
-- Bash scripts I used for this previously are not easily scalable
-
------
 
 ## License
 
